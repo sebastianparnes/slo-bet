@@ -309,13 +309,21 @@ async def fetch_standings(league_id: int) -> list[dict]:
 def _mock_matches(league_name: str = None) -> list[dict]:
     today = date.today()
     add = lambda d,t: (today+timedelta(days=d)).isoformat()+f"T{t}+01:00"
-    # Real fixtures from Flashscore for this week
-    all_m = [
+    # Real PrvaLiga fixtures Round 26 (Mar 7-9 2026)
+    prvaliga = [
         {"id":"real_01","date":add(1,"20:00:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NS Mura","home_team_id":1600,"away_team":"NK Primorje Ajdovščina","away_team_id":99991,"venue":"Fazanerija"},
         {"id":"real_02","date":add(2,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Maribor","away_team_id":1601,"venue":"Stožice"},
         {"id":"real_03","date":add(2,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Aluminij","home_team_id":10576,"away_team":"FC Koper","away_team_id":2279,"venue":"Aluminij"},
         {"id":"real_04","date":add(3,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Radomlje","home_team_id":14370,"away_team":"NK Bravo","away_team_id":10203,"venue":"Radomlje"},
+        {"id":"real_05","date":add(3,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Celje","home_team_id":1594,"away_team":"ND Gorica","away_team_id":99993,"venue":"Arena Z'dežele"},
     ]
+    # Real 2.SNL fixtures Round 26 (Mar 8-9 2026)
+    snl2 = [
+        {"id":"real_06","date":add(2,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Nafta 1903","home_team_id":14372,"away_team":"NK Ankaran","away_team_id":14371,"venue":"Lendava"},
+        {"id":"real_07","date":add(2,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"FC Drava Ptuj","home_team_id":10578,"away_team":"NK Domžale","away_team_id":1595,"venue":"Ptuj"},
+        {"id":"real_08","date":add(3,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Rogaška","home_team_id":99992,"away_team":"NK Aluminij","away_team_id":10576,"venue":"Rogaška Slatina"},
+    ]
+    all_m = prvaliga + snl2
     if league_name: return [m for m in all_m if m["league"]==league_name]
     return all_m
 

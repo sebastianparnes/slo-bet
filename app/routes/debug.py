@@ -50,3 +50,36 @@ async def debug():
             result["standings_error"] = str(e)
 
     return result
+
+
+@router.get("/api/debug/xbet")
+async def debug_xbet():
+    """Test 1xbet endpoints to verify league IDs."""
+    import httpx
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Referer": "https://1xbet.com/en/line/football",
+    }
+    result = {}
+    async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+        for name, lid in [("PrvaLiga_118593", 118593), ("2SNL_270435", 270435)]:
+            try:
+                r = await client.get(
+                    "https://1xbet.com/LineFeed/GetChampionship",
+                    params={"championshipId": lid, "lng": "en", "country": 1, "partner": 3, "getEmpty": True}
+                )
+                d = r.json()
+                games = d.get("Value", {}).get("GE", []) or d.get("Value", []) or []
+                result[name] = {
+                    "status": r.status_code,
+                    "games_count": len(games),
+                    "sample": [
+                        f"{g.get('O1','?')} vs {g.get('O2','?')}"
+                        for g in games[:3]
+                    ] if games else [],
+                    "raw_keys": list(d.keys())[:8] if d else []
+                }
+            except Exception as e:
+                result[name] = {"error": str(e)}
+    return result
