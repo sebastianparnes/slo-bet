@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: slo-bet
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: API_FOOTBALL_KEY
+        sync: false
+      - key: DB_PATH
+        value: /opt/render/project/src/data/betting.db
+    disk:
+      name: slo-bet-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
