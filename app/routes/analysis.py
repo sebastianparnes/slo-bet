@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from app.football_api import fetch_standings, SLOVENIAN_LEAGUES
+from app.football_api import fetch_standings, LEAGUES
 
 router = APIRouter()
 
@@ -7,9 +7,9 @@ router = APIRouter()
 @router.get("/standings/{league}")
 async def get_standings(league: str):
     """Get current standings for a Slovenian league."""
-    league_id = SLOVENIAN_LEAGUES.get(league)
+    league_id = LEAGUES.get(league)
     if not league_id:
-        return {"error": f"League '{league}' not found. Options: {list(SLOVENIAN_LEAGUES.keys())}"}
+        return {"error": f"League '{league}' not found. Options: {list(LEAGUES.keys())}"}
     
     standings = await fetch_standings(league_id)
     return {
