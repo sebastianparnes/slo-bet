@@ -54,25 +54,50 @@ async def debug():
 
 @router.get("/api/debug/xbet")
 async def debug_xbet():
-    """Test OddsPortal scraping for 1xbet odds."""
-    import httpx, re, json
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/json,*/*",
-        "Referer": "https://www.oddsportal.com/",
+    """Test Cloudflare proxy → 1xbet pipeline."""
+    import os, httpx
+    proxy = os.getenv("XBET_PROXY_URL", "")
+    result = {
+        "proxy_configured": bool(proxy),
+        "proxy_url": proxy or "NOT SET — add XBET_PROXY_URL in Railway variables",
     }
-    result = {}
-    async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+    if not proxy:
+        return result
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        # Test 1: proxy is alive
         try:
-            r = await client.get("https://www.oddsportal.com/football/slovenia/prva-liga/")
-            result["status"] = r.status_code
-            result["content_length"] = len(r.text)
-            # Look for team names in the page
-            teams = re.findall(r'"homeTeam"\s*:\s*"([^"]+)"', r.text)[:5]
-            result["teams_found"] = teams
-            # Look for match URLs
-            urls = re.findall(r'href="(/football/slovenia/[^"]+/)"', r.text)[:5]
-            result["match_urls"] = list(set(urls))
+            r = await client.get(proxy, params={"path": "/en/line/football", "params": ""})
+            result["proxy_status"] = r.status_code
+            result["proxy_response_len"] = len(r.text)
         except Exception as e:
-            result["error"] = str(e)
+            result["proxy_error"] = str(e)
+            return result
+
+        # Test 2: fetch PrvaLiga games
+        try:
+            r2 = await client.get(proxy, params={
+                "path": "/LineFeed/GetChampionship",
+                "params": "championshipId=118593&lng=en&isSubGames=true&GroupEvents=true&allEventsGrouped=true&mode=4"
+            })
+            result["xbet_status"] = r2.status_code
+            if r2.status_code == 200:
+                data = r2.json()
+                games = (data.get("Value", {}).get("TopEvents") or
+                         data.get("Value", {}).get("Events") or
+                         data.get("Value") or [])
+                if isinstance(games, list):
+                    result["games_found"] = len(games)
+                    result["sample"] = [
+                        f"{g.get('O1','?')} vs {g.get('O2','?')}"
+                        for g in games[:5]
+                    ]
+                else:
+                    result["raw_keys"] = list(data.keys())[:10]
+                    result["value_type"] = type(data.get("Value")).__name__
+            else:
+                result["xbet_response"] = r2.text[:300]
+        except Exception as e:
+            result["xbet_error"] = str(e)
+
     return result
