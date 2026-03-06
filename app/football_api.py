@@ -306,25 +306,46 @@ async def fetch_standings(league_id: int) -> list[dict]:
 
 # ── Mock data ──────────────────────────────────────────────────────────────
 
+def _get_hardcoded_fixtures() -> list[dict]:
+    """
+    Real fixtures scraped from Flashscore. Updated manually each round.
+    PrvaLiga Round 26: Mar 7-9, 2026
+    2.SNL Round 26: Mar 6-8, 2026
+    Next fixtures Round 27: Mar 14-15, 2026
+    """
+    return [
+        # PrvaLiga Round 26
+        {"id":"p26_01","date":"2026-03-07T20:00:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NS Mura","home_team_id":1600,"away_team":"NK Primorje Ajdovščina","away_team_id":99991,"venue":"Fazanerija"},
+        {"id":"p26_02","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Maribor","away_team_id":1601,"venue":"Stožice"},
+        {"id":"p26_03","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Aluminij","home_team_id":10576,"away_team":"FC Koper","away_team_id":2279,"venue":"Aluminij Stadium"},
+        {"id":"p26_04","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Radomlje","home_team_id":14370,"away_team":"NK Bravo","away_team_id":10203,"venue":"Radomlje"},
+        {"id":"p26_05","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Celje","home_team_id":1594,"away_team":"ND Gorica","away_team_id":99993,"venue":"Arena Z'dežele"},
+        # 2.SNL Round 26
+        {"id":"s26_01","date":"2026-03-06T17:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Ilirija","home_team_id":99994,"away_team":"NK Jesenice","away_team_id":99995,"venue":"Ljubljana"},
+        {"id":"s26_02","date":"2026-03-07T17:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"ND Slovan Ljubljana","home_team_id":99996,"away_team":"ND Beltinci","away_team_id":99997,"venue":"Kodeljevo"},
+        {"id":"s26_03","date":"2026-03-07T17:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Dravinja","home_team_id":99998,"away_team":"NK Bistrica","away_team_id":99999,"venue":"Dravinja"},
+        {"id":"s26_04","date":"2026-03-07T17:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"ND Gorica B","home_team_id":99993,"away_team":"Tabor Sežana","away_team_id":88001,"venue":"Nova Gorica"},
+        {"id":"s26_05","date":"2026-03-07T17:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Rudar","home_team_id":88002,"away_team":"NK Bilje","away_team_id":88003,"venue":"Velenje"},
+        {"id":"s26_06","date":"2026-03-08T14:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Triglav","home_team_id":88004,"away_team":"NK Grosuplje","away_team_id":88005,"venue":"Kranj"},
+        {"id":"s26_07","date":"2026-03-08T14:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"Krško Posavje","home_team_id":88006,"away_team":"NK Jadran Dekani","away_team_id":88007,"venue":"Krško"},
+        {"id":"s26_08","date":"2026-03-08T14:00:00+01:00","status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Krka","home_team_id":88008,"away_team":"NK Nafta 1903","away_team_id":14372,"venue":"Novo Mesto"},
+        # PrvaLiga Round 27 (next week)
+        {"id":"p27_01","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 27","home_team":"NK Maribor","home_team_id":1601,"away_team":"NS Mura","away_team_id":1600,"venue":"Ljudski vrt"},
+        {"id":"p27_02","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 27","home_team":"NK Primorje Ajdovščina","home_team_id":99991,"away_team":"NK Celje","away_team_id":1594,"venue":"Ajdovščina"},
+        {"id":"p27_03","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 27","home_team":"FC Koper","home_team_id":2279,"away_team":"NK Olimpija Ljubljana","away_team_id":1598,"venue":"Bonifika"},
+        {"id":"p27_04","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 27","home_team":"NK Bravo","home_team_id":10203,"away_team":"NK Aluminij","away_team_id":10576,"venue":"ZAK"},
+        {"id":"p27_05","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 27","home_team":"ND Gorica","home_team_id":99993,"away_team":"NK Radomlje","away_team_id":14370,"venue":"Nova Gorica"},
+    ]
+
 def _mock_matches(league_name: str = None) -> list[dict]:
-    today = date.today()
-    add = lambda d,t: (today+timedelta(days=d)).isoformat()+f"T{t}+01:00"
-    # Real PrvaLiga fixtures Round 26 (Mar 7-9 2026)
-    prvaliga = [
-        {"id":"real_01","date":add(1,"20:00:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NS Mura","home_team_id":1600,"away_team":"NK Primorje Ajdovščina","away_team_id":99991,"venue":"Fazanerija"},
-        {"id":"real_02","date":add(2,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Maribor","away_team_id":1601,"venue":"Stožice"},
-        {"id":"real_03","date":add(2,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Aluminij","home_team_id":10576,"away_team":"FC Koper","away_team_id":2279,"venue":"Aluminij"},
-        {"id":"real_04","date":add(3,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Radomlje","home_team_id":14370,"away_team":"NK Bravo","away_team_id":10203,"venue":"Radomlje"},
-        {"id":"real_05","date":add(3,"17:30:00"),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Round 26","home_team":"NK Celje","home_team_id":1594,"away_team":"ND Gorica","away_team_id":99993,"venue":"Arena Z'dežele"},
-    ]
-    # Real 2.SNL fixtures Round 26 (Mar 8-9 2026)
-    snl2 = [
-        {"id":"real_06","date":add(2,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Nafta 1903","home_team_id":14372,"away_team":"NK Ankaran","away_team_id":14371,"venue":"Lendava"},
-        {"id":"real_07","date":add(2,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"FC Drava Ptuj","home_team_id":10578,"away_team":"NK Domžale","away_team_id":1595,"venue":"Ptuj"},
-        {"id":"real_08","date":add(3,"14:00:00"),"status":"NS","league":"2SNL","league_id":219,"round":"Round 26","home_team":"NK Rogaška","home_team_id":99992,"away_team":"NK Aluminij","away_team_id":10576,"venue":"Rogaška Slatina"},
-    ]
-    all_m = prvaliga + snl2
-    if league_name: return [m for m in all_m if m["league"]==league_name]
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    all_m = [m for m in _get_hardcoded_fixtures() if m["date"][:10] >= today]
+    if not all_m:
+        # Fallback if all dates passed
+        all_m = _get_hardcoded_fixtures()
+    if league_name:
+        return [m for m in all_m if m["league"] == league_name]
     return all_m
 
 def _mock_form(team_id:int=0) -> dict:
