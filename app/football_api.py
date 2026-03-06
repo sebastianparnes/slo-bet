@@ -285,7 +285,9 @@ async def fetch_h2h(home_id: int, away_id: int) -> dict:
 
 
 async def fetch_standings(league_id: int) -> list[dict]:
-    # TheSportsDB for standings (more reliable for table data)
+    # TheSportsDB for standings — use mock for 2SNL (no reliable free source)
+    if league_id == 219:
+        return _mock_standings_2snl()
     league_tsdb = "4966" if league_id == 218 else None
     if not league_tsdb:
         return _mock_standings()
@@ -350,6 +352,7 @@ def _mock_matches(league_name: str = None) -> list[dict]:
 
 # Real-world inspired form data per team (based on actual 2025/26 standings)
 _TEAM_FORM_DATA = {
+    # PrvaLiga
     1598: {"form":["W","W","D","W","W","W","D"],"sc":[3,2,1,2,3,1,2],"cc":[0,1,1,0,1,0,1]},  # Olimpija — leader
     1601: {"form":["W","D","W","L","W","W","W"],"sc":[2,1,2,0,1,2,2],"cc":[0,1,0,2,0,1,1]},  # Maribor — 3rd
     1594: {"form":["W","W","W","D","L","W","W"],"sc":[2,3,1,1,0,2,1],"cc":[0,0,0,1,1,1,0]},  # Celje — 2nd
@@ -360,10 +363,27 @@ _TEAM_FORM_DATA = {
     14370:{"form":["L","L","D","W","L","D","L"],"sc":[0,1,1,2,0,0,1],"cc":[2,3,1,1,2,1,2]},  # Radomlje — 8th
     99991:{"form":["D","W","L","D","W","L","D"],"sc":[1,2,0,1,1,0,0],"cc":[1,0,2,1,0,2,1]},  # Primorje
     99993:{"form":["L","D","W","L","L","W","D"],"sc":[0,1,1,0,1,2,1],"cc":[2,1,0,2,2,0,1]},  # Gorica
-    14372:{"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},  # Nafta
-    14371:{"form":["L","W","L","D","W","L","W"],"sc":[0,2,1,1,1,0,2],"cc":[2,0,2,1,0,2,1]},  # Ankaran
+    # 2SNL
+    14372:{"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},  # Nafta 1903 — líder
+    88008:{"form":["W","W","W","D","W","L","W"],"sc":[2,2,3,1,2,0,1],"cc":[0,1,0,1,0,2,0]},  # NK Krka — 2do
+    88004:{"form":["W","D","W","W","L","W","D"],"sc":[1,1,2,1,0,2,1],"cc":[0,1,0,0,1,1,1]},  # NK Triglav — 3ro
+    99996:{"form":["D","W","W","L","W","D","W"],"sc":[1,2,1,0,2,1,1],"cc":[1,0,0,2,1,1,0]},  # Slovan Lj — 4to
+    88006:{"form":["W","L","D","W","W","L","W"],"sc":[2,0,1,1,2,0,2],"cc":[0,2,1,0,1,2,0]},  # Krško — 5to
+    99997:{"form":["D","W","L","W","D","W","L"],"sc":[1,2,0,1,1,2,0],"cc":[1,0,2,0,1,0,2]},  # Beltinci — 6to
+    14371:{"form":["L","W","L","D","W","L","W"],"sc":[0,2,1,1,1,0,2],"cc":[2,0,2,1,0,2,1]},  # Ankaran — 7mo
+    88002:{"form":["L","D","W","L","D","L","W"],"sc":[0,1,2,0,1,0,1],"cc":[2,1,0,2,1,2,0]},  # Rudar — 8vo
+    88007:{"form":["W","L","D","W","L","D","L"],"sc":[1,0,1,2,0,1,0],"cc":[0,2,1,0,2,1,2]},  # Jadran Dekani
+    88005:{"form":["D","L","W","D","L","W","L"],"sc":[1,0,2,0,1,1,0],"cc":[1,2,0,1,2,0,2]},  # Grosuplje
+    88001:{"form":["L","D","L","W","L","D","L"],"sc":[0,1,0,1,0,0,1],"cc":[2,1,2,0,2,1,2]},  # Tabor Sežana
+    88003:{"form":["W","L","L","D","W","L","D"],"sc":[1,0,0,1,2,0,0],"cc":[0,2,2,1,0,2,1]},  # NK Bilje
+    99998:{"form":["D","W","L","D","L","W","D"],"sc":[1,1,0,1,0,2,1],"cc":[1,0,2,1,2,0,1]},  # Dravinja
+    99999:{"form":["L","W","D","L","W","L","D"],"sc":[0,2,1,0,1,0,1],"cc":[2,0,1,2,0,2,1]},  # Bistrica
+    99994:{"form":["W","D","L","W","W","D","L"],"sc":[2,1,0,1,2,1,0],"cc":[0,1,2,0,1,1,2]},  # Ilirija
+    99995:{"form":["L","W","D","L","D","W","L"],"sc":[0,2,1,0,1,1,0],"cc":[2,0,1,2,1,0,2]},  # Jesenice
+    # Also PrvaLiga extras
     10578:{"form":["D","L","W","D","L","W","D"],"sc":[1,0,2,1,0,1,0],"cc":[1,2,0,1,2,0,1]},  # Drava Ptuj
     1595: {"form":["W","W","L","W","D","W","L"],"sc":[2,3,0,1,1,2,0],"cc":[0,1,2,0,1,0,2]},  # Domžale
+    99992:{"form":["W","D","W","L","W","W","D"],"sc":[1,1,2,0,2,1,1],"cc":[0,1,0,2,0,0,1]},  # Rogaška
 }
 
 def _mock_form(team_id:int=0) -> dict:
@@ -379,6 +399,22 @@ def _mock_form(team_id:int=0) -> dict:
         r=pools[seed]
     n=len(r)
     return {"form":r,"form_string":"".join(r[-5:]),"avg_scored":round(sum(sc)/n,2),"avg_conceded":round(sum(cc)/n,2),"clean_sheets":sum(1 for g in cc if g==0),"btts_count":sum(1 for s,c in zip(sc,cc) if s>0 and c>0),"games_analyzed":n}
+
+def _mock_standings_2snl() -> list[dict]:
+    """Real-world inspired 2SNL standings 2025/26."""
+    teams = [
+        ("NK Nafta 1903",14372,48),("NK Krka",88008,44),("NK Triglav",88004,40),
+        ("ND Slovan Ljubljana",99996,37),("Krško Posavje",88006,33),("ND Beltinci",99997,30),
+        ("NK Ankaran",14371,26),("NK Rudar",88002,23),("NK Jadran Dekani",88007,20),
+        ("NK Grosuplje",88005,17),("Tabor Sežana",88001,14),("NK Bilje",88003,10),
+        ("NK Dravinja",99998,8),("NK Bistrica",99999,6),
+        ("NK Ilirija",99994,19),("NK Jesenice",99995,15),
+    ]
+    return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":24,
+             "won":t[2]//3,"drawn":t[2]%3,"lost":24-t[2]//3-t[2]%3,
+             "goals_for":35-i*2,"goals_against":12+i*2,"goal_diff":23-i*4,
+             "form":"WWDWW" if i<4 else ("WDLWL" if i<8 else "LDLLL")}
+            for i,t in enumerate(teams)]
 
 def _mock_h2h() -> dict:
     return {"total_matches":8,"home_wins":4,"draws":2,"away_wins":2,"avg_goals_h2h":2.4,"btts_pct":62.5,"over25_pct":50.0}
