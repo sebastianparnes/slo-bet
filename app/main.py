@@ -8,6 +8,7 @@ import asyncio
 import os
 
 from app.routes import matches, history, analysis
+from app.routes import debug as debug_router
 from app.result_poller import start_poller
 
 
@@ -39,6 +40,7 @@ app.add_middleware(
 
 app.include_router(matches.router,  prefix="/api/matches",  tags=["Matches"])
 app.include_router(history.router,  prefix="/api/history",  tags=["History"])
+app.include_router(debug_router.router, tags=["Debug"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 
 app.mount("/static", StaticFiles(directory="frontend"), name="static")

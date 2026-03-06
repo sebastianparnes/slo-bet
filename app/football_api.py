@@ -1,394 +1,294 @@
 """
-Football data fetcher using API-Football (api-football.com)
+Football data fetcher — API-Football v3
 Slovenian leagues:
-  - PrvaLiga (1st division): league_id = 218
-  - 2. SNL (2nd division): league_id = 219
+  PrvaLiga : league_id 218
+  2.SNL    : league_id 219
 
-Requires API key from: https://www.api-football.com/
-Set env var: API_FOOTBALL_KEY=your_key_here
-
-Free tier: 100 requests/day
+Free tier: 100 req/day — https://dashboard.api-football.com/register
+Set env var: API_FOOTBALL_KEY=your_key
 """
 
 import httpx
 import os
-import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional
-from app.database import get_connection
 
-API_KEY = os.getenv("API_FOOTBALL_KEY", "")
 BASE_URL = "https://v3.football.api-sports.io"
 
 SLOVENIAN_LEAGUES = {
-    "PrvaLiga": 218,       # 1a división
-    "2SNL": 219,           # 2a división
+    "PrvaLiga": 218,
+    "2SNL":     219,
 }
 
-HEADERS = {
-    "x-apisports-key": API_KEY,
-    "x-rapidapi-host": "v3.football.api-sports.io"
-}
-
-# Season actual
+# PrvaLiga runs Aug–May, so 2024 = 2024/25 season
 CURRENT_SEASON = 2024
 
 
-async def fetch_upcoming_matches(days_ahead: int = 5) -> list[dict]:
-    """Fetch matches from the next N days for Slovenian leagues."""
-    if not API_KEY:
-        return _get_mock_matches()
-    
-    today = datetime.now().date()
+def _get_headers() -> dict:
+    """Read API key fresh on every call so env vars set after import work."""
+    key = os.getenv("API_FOOTBALL_KEY", "")
+    return {
+        "x-apisports-key": key,
+        "x-rapidapi-host": "v3.football.api-sports.io",
+    }
+
+def _has_key() -> bool:
+    return bool(os.getenv("API_FOOTBALL_KEY", "").strip())
+
+
+# ── Upcoming fixtures ──────────────────────────────────────────────────────
+
+async def fetch_upcoming_matches(days_ahead: int = 7) -> list[dict]:
+    if not _has_key():
+        print("[API-Football] No API key — returning mock data")
+        return _mock_matches()
+
+    today    = date.today()
     end_date = today + timedelta(days=days_ahead)
-    
     all_matches = []
-    
+
     async with httpx.AsyncClient(timeout=30) as client:
         for league_name, league_id in SLOVENIAN_LEAGUES.items():
             try:
                 resp = await client.get(
                     f"{BASE_URL}/fixtures",
-                    headers=HEADERS,
+                    headers=_get_headers(),
                     params={
-                        "league": league_id,
-                        "season": CURRENT_SEASON,
-                        "from": str(today),
-                        "to": str(end_date),
-                        "timezone": "Europe/Ljubljana"
+                        "league":   league_id,
+                        "season":   CURRENT_SEASON,
+                        "from":     str(today),
+                        "to":       str(end_date),
+                        "timezone": "Europe/Ljubljana",
                     }
                 )
                 data = resp.json()
-                
-                if data.get("errors") and data["errors"]:
-                    print(f"API error for {league_name}: {data['errors']}")
+                errors = data.get("errors", {})
+                if errors and (isinstance(errors, dict) and errors or isinstance(errors, list) and errors):
+                    print(f"[API-Football] Error {league_name}: {errors}")
                     continue
-                
-                fixtures = data.get("response", [])
-                for f in fixtures:
-                    match = _parse_fixture(f, league_name)
-                    if match:
-                        all_matches.append(match)
+                for f in data.get("response", []):
+                    m = _parse_fixture(f, league_name)
+                    if m:
+                        all_matches.append(m)
             except Exception as e:
-                print(f"Error fetching {league_name}: {e}")
-                all_matches.extend(_get_mock_matches(league_name))
-    
+                print(f"[API-Football] Exception fetching {league_name}: {e}")
+
     if not all_matches:
-        return _get_mock_matches()
-    
+        print("[API-Football] No fixtures returned — check key or season")
+        return _mock_matches()
+
     return sorted(all_matches, key=lambda x: x["date"])
 
 
-async def fetch_team_form(team_id: int, league_id: int, last_n: int = 7) -> dict:
-    """Fetch last N results for a team."""
-    if not API_KEY:
-        return _get_mock_form()
-    
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{BASE_URL}/fixtures",
-            headers=HEADERS,
-            params={
-                "team": team_id,
-                "league": league_id,
-                "season": CURRENT_SEASON,
-                "last": last_n,
-                "status": "FT"
-            }
-        )
-        data = resp.json()
-        fixtures = data.get("response", [])
-        
-        results = []
-        goals_scored = []
-        goals_conceded = []
-        
-        for f in fixtures:
-            home_id = f["teams"]["home"]["id"]
-            home_goals = f["goals"]["home"] or 0
-            away_goals = f["goals"]["away"] or 0
-            
-            is_home = (home_id == team_id)
-            team_goals = home_goals if is_home else away_goals
-            opp_goals = away_goals if is_home else home_goals
-            
-            goals_scored.append(team_goals)
-            goals_conceded.append(opp_goals)
-            
-            if team_goals > opp_goals:
-                results.append("W")
-            elif team_goals == opp_goals:
-                results.append("D")
-            else:
-                results.append("L")
-        
-        return {
-            "form": results,
-            "form_string": "".join(results[-5:]),
-            "avg_scored": round(sum(goals_scored) / len(goals_scored), 2) if goals_scored else 0,
-            "avg_conceded": round(sum(goals_conceded) / len(goals_conceded), 2) if goals_conceded else 0,
-            "clean_sheets": sum(1 for g in goals_conceded if g == 0),
-            "btts_count": sum(1 for s, c in zip(goals_scored, goals_conceded) if s > 0 and c > 0),
-            "games_analyzed": len(results)
-        }
+# ── Team form ──────────────────────────────────────────────────────────────
 
+async def fetch_team_form(team_id: int, league_id: int, last_n: int = 7) -> dict:
+    if not _has_key():
+        return _mock_form(team_id)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            resp = await client.get(
+                f"{BASE_URL}/fixtures",
+                headers=_get_headers(),
+                params={
+                    "team":   team_id,
+                    "league": league_id,
+                    "season": CURRENT_SEASON,
+                    "last":   last_n,
+                    "status": "FT",
+                }
+            )
+            fixtures = resp.json().get("response", [])
+        except Exception as e:
+            print(f"[API-Football] form fetch error: {e}")
+            return _mock_form(team_id)
+
+    if not fixtures:
+        return _mock_form(team_id)
+
+    results, scored, conceded = [], [], []
+    for f in fixtures:
+        is_home = f["teams"]["home"]["id"] == team_id
+        tg = (f["goals"]["home"] or 0) if is_home else (f["goals"]["away"] or 0)
+        og = (f["goals"]["away"] or 0) if is_home else (f["goals"]["home"] or 0)
+        scored.append(tg); conceded.append(og)
+        results.append("W" if tg > og else ("D" if tg == og else "L"))
+
+    n = len(results) or 1
+    return {
+        "form":           results,
+        "form_string":    "".join(results[-5:]),
+        "avg_scored":     round(sum(scored)   / n, 2),
+        "avg_conceded":   round(sum(conceded) / n, 2),
+        "clean_sheets":   sum(1 for g in conceded if g == 0),
+        "btts_count":     sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
+        "games_analyzed": n,
+    }
+
+
+# ── Head-to-head ───────────────────────────────────────────────────────────
 
 async def fetch_h2h(home_id: int, away_id: int) -> dict:
-    """Fetch head-to-head history between two teams."""
-    if not API_KEY:
-        return _get_mock_h2h()
-    
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{BASE_URL}/fixtures/headtohead",
-            headers=HEADERS,
-            params={
-                "h2h": f"{home_id}-{away_id}",
-                "last": 10
-            }
-        )
-        data = resp.json()
-        fixtures = data.get("response", [])
-        
-        home_wins = 0
-        away_wins = 0
-        draws = 0
-        total_goals = []
-        btts = 0
-        
-        for f in fixtures:
-            hg = f["goals"]["home"] or 0
-            ag = f["goals"]["away"] or 0
-            total_goals.append(hg + ag)
-            
-            fh_id = f["teams"]["home"]["id"]
-            if hg > ag:
-                if fh_id == home_id:
-                    home_wins += 1
-                else:
-                    away_wins += 1
-            elif ag > hg:
-                if fh_id == away_id:
-                    away_wins += 1
-                else:
-                    home_wins += 1
-            else:
-                draws += 1
-            
-            if hg > 0 and ag > 0:
-                btts += 1
-        
-        total = len(fixtures)
-        return {
-            "total_matches": total,
-            "home_wins": home_wins,
-            "draws": draws,
-            "away_wins": away_wins,
-            "avg_goals": round(sum(total_goals) / total, 2) if total else 0,
-            "btts_pct": round((btts / total) * 100, 1) if total else 0,
-            "over25_pct": round((sum(1 for g in total_goals if g > 2.5) / total) * 100, 1) if total else 0,
-        }
+    if not _has_key():
+        return _mock_h2h()
 
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            resp = await client.get(
+                f"{BASE_URL}/fixtures/headtohead",
+                headers=_get_headers(),
+                params={"h2h": f"{home_id}-{away_id}", "last": 10}
+            )
+            fixtures = resp.json().get("response", [])
+        except Exception as e:
+            print(f"[API-Football] h2h fetch error: {e}")
+            return _mock_h2h()
+
+    hw = aw = draws = btts = 0
+    goals = []
+    for f in fixtures:
+        hg = f["goals"]["home"] or 0
+        ag = f["goals"]["away"] or 0
+        goals.append(hg + ag)
+        fh_id = f["teams"]["home"]["id"]
+        if hg > ag:
+            if fh_id == home_id: hw += 1
+            else: aw += 1
+        elif ag > hg:
+            if fh_id == away_id: aw += 1
+            else: hw += 1
+        else:
+            draws += 1
+        if hg > 0 and ag > 0:
+            btts += 1
+
+    n = len(fixtures) or 1
+    return {
+        "total_matches": len(fixtures),
+        "home_wins":     hw,
+        "draws":         draws,
+        "away_wins":     aw,
+        "avg_goals_h2h": round(sum(goals) / n, 2),
+        "btts_pct":      round(btts / n * 100, 1),
+        "over25_pct":    round(sum(1 for g in goals if g > 2.5) / n * 100, 1),
+    }
+
+
+# ── Standings ──────────────────────────────────────────────────────────────
 
 async def fetch_standings(league_id: int) -> list[dict]:
-    """Fetch current league standings."""
-    if not API_KEY:
-        return _get_mock_standings()
-    
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{BASE_URL}/standings",
-            headers=HEADERS,
-            params={"league": league_id, "season": CURRENT_SEASON}
-        )
-        data = resp.json()
-        
-        try:
-            standings_raw = data["response"][0]["league"]["standings"][0]
-            return [
-                {
-                    "rank": s["rank"],
-                    "team_id": s["team"]["id"],
-                    "team_name": s["team"]["name"],
-                    "points": s["points"],
-                    "played": s["all"]["played"],
-                    "won": s["all"]["win"],
-                    "drawn": s["all"]["draw"],
-                    "lost": s["all"]["lose"],
-                    "goals_for": s["all"]["goals"]["for"],
-                    "goals_against": s["all"]["goals"]["against"],
-                    "goal_diff": s["goalsDiff"],
-                    "form": s.get("form", ""),
-                }
-                for s in standings_raw
-            ]
-        except (KeyError, IndexError):
-            return []
+    if not _has_key():
+        return _mock_standings()
 
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            resp = await client.get(
+                f"{BASE_URL}/standings",
+                headers=_get_headers(),
+                params={"league": league_id, "season": CURRENT_SEASON}
+            )
+            data = resp.json()
+            rows = data["response"][0]["league"]["standings"][0]
+        except Exception as e:
+            print(f"[API-Football] standings error: {e}")
+            return _mock_standings()
+
+    return [
+        {
+            "rank":          s["rank"],
+            "team_id":       s["team"]["id"],
+            "team_name":     s["team"]["name"],
+            "points":        s["points"],
+            "played":        s["all"]["played"],
+            "won":           s["all"]["win"],
+            "drawn":         s["all"]["draw"],
+            "lost":          s["all"]["lose"],
+            "goals_for":     s["all"]["goals"]["for"],
+            "goals_against": s["all"]["goals"]["against"],
+            "goal_diff":     s["goalsDiff"],
+            "form":          s.get("form", ""),
+        }
+        for s in rows
+    ]
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
 
 def _parse_fixture(f: dict, league_name: str) -> Optional[dict]:
     try:
         return {
-            "id": str(f["fixture"]["id"]),
-            "date": f["fixture"]["date"],
-            "status": f["fixture"]["status"]["short"],
-            "league": league_name,
-            "league_id": f["league"]["id"],
-            "round": f["league"]["round"],
-            "home_team": f["teams"]["home"]["name"],
+            "id":           str(f["fixture"]["id"]),
+            "date":         f["fixture"]["date"],
+            "status":       f["fixture"]["status"]["short"],
+            "league":       league_name,
+            "league_id":    f["league"]["id"],
+            "round":        f["league"]["round"],
+            "home_team":    f["teams"]["home"]["name"],
             "home_team_id": f["teams"]["home"]["id"],
-            "away_team": f["teams"]["away"]["name"],
+            "away_team":    f["teams"]["away"]["name"],
             "away_team_id": f["teams"]["away"]["id"],
-            "venue": f["fixture"]["venue"].get("name", ""),
+            "venue":        f["fixture"]["venue"].get("name", ""),
         }
     except Exception:
         return None
 
 
-def _get_mock_matches(league_name: str = None) -> list[dict]:
-    """Mock data when no API key is configured."""
-    from datetime import date, timedelta
-    
+# ── Mock data ──────────────────────────────────────────────────────────────
+# Used only when no API key is set.
+# Teams and IDs are real; fixtures are placeholder dates.
+
+def _mock_matches() -> list[dict]:
     today = date.today()
-    mocks = [
-        {
-            "id": "mock_001",
-            "date": (today + timedelta(days=1)).isoformat() + "T15:00:00+02:00",
-            "status": "NS",
-            "league": "PrvaLiga",
-            "league_id": 218,
-            "round": "Regular Season - 28",
-            "home_team": "NK Maribor",
-            "home_team_id": 1601,
-            "away_team": "NK Koper",
-            "away_team_id": 2279,
-            "venue": "Ljudski vrt",
-        },
-        {
-            "id": "mock_002",
-            "date": (today + timedelta(days=2)).isoformat() + "T17:30:00+02:00",
-            "status": "NS",
-            "league": "PrvaLiga",
-            "league_id": 218,
-            "round": "Regular Season - 28",
-            "home_team": "NK Olimpija Ljubljana",
-            "home_team_id": 1598,
-            "away_team": "NK Celje",
-            "away_team_id": 1594,
-            "venue": "Stožice",
-        },
-        {
-            "id": "mock_003",
-            "date": (today + timedelta(days=2)).isoformat() + "T17:30:00+02:00",
-            "status": "NS",
-            "league": "PrvaLiga",
-            "league_id": 218,
-            "round": "Regular Season - 28",
-            "home_team": "NK Bravo",
-            "home_team_id": 10203,
-            "away_team": "NK Domžale",
-            "away_team_id": 1595,
-            "venue": "ZAK",
-        },
-        {
-            "id": "mock_004",
-            "date": (today + timedelta(days=3)).isoformat() + "T15:00:00+02:00",
-            "status": "NS",
-            "league": "PrvaLiga",
-            "league_id": 218,
-            "round": "Regular Season - 28",
-            "home_team": "NK Mura",
-            "home_team_id": 1600,
-            "away_team": "NK Radomlje",
-            "away_team_id": 14370,
-            "venue": "Fazanerija",
-        },
-        {
-            "id": "mock_005",
-            "date": (today + timedelta(days=4)).isoformat() + "T15:00:00+02:00",
-            "status": "NS",
-            "league": "2SNL",
-            "league_id": 219,
-            "round": "Regular Season - 25",
-            "home_team": "NK Nafta 1903",
-            "home_team_id": 14372,
-            "away_team": "NK Aluminij",
-            "away_team_id": 10576,
-            "venue": "Lendava",
-        },
-        {
-            "id": "mock_006",
-            "date": (today + timedelta(days=5)).isoformat() + "T17:00:00+02:00",
-            "status": "NS",
-            "league": "2SNL",
-            "league_id": 219,
-            "round": "Regular Season - 25",
-            "home_team": "NK Drava Ptuj",
-            "home_team_id": 10578,
-            "away_team": "NK Ankaran",
-            "away_team_id": 14371,
-            "venue": "Štadion ob Dravi",
-        },
-    ]
-    
-    if league_name:
-        return [m for m in mocks if m["league"] == league_name]
-    return mocks
-
-
-def _get_mock_form() -> dict:
-    import random
-    results = random.choices(["W", "D", "L"], weights=[0.45, 0.25, 0.30], k=7)
-    goals_s = [random.randint(0, 3) for _ in range(7)]
-    goals_c = [random.randint(0, 2) for _ in range(7)]
-    return {
-        "form": results,
-        "form_string": "".join(results[-5:]),
-        "avg_scored": round(sum(goals_s) / 7, 2),
-        "avg_conceded": round(sum(goals_c) / 7, 2),
-        "clean_sheets": sum(1 for g in goals_c if g == 0),
-        "btts_count": sum(1 for s, c in zip(goals_s, goals_c) if s > 0 and c > 0),
-        "games_analyzed": 7
-    }
-
-
-def _get_mock_h2h() -> dict:
-    return {
-        "total_matches": 8,
-        "home_wins": 3,
-        "draws": 2,
-        "away_wins": 3,
-        "avg_goals": 2.4,
-        "btts_pct": 62.5,
-        "over25_pct": 50.0,
-    }
-
-
-def _get_mock_standings() -> list[dict]:
-    teams = [
-        ("NK Olimpija Ljubljana", 1598, 58, 27),
-        ("NK Maribor", 1601, 54, 27),
-        ("NK Celje", 1594, 48, 27),
-        ("NK Koper", 2279, 42, 27),
-        ("NK Bravo", 10203, 36, 27),
-        ("NK Mura", 1600, 30, 27),
-        ("NK Domžale", 1595, 28, 27),
-        ("NK Radomlje", 14370, 20, 27),
-    ]
+    add   = lambda d: (today + timedelta(days=d)).isoformat() + "T17:00:00+01:00"
     return [
-        {
-            "rank": i + 1,
-            "team_id": t[1],
-            "team_name": t[0],
-            "points": t[2],
-            "played": t[3],
-            "won": t[2] // 3,
-            "drawn": (t[2] % 3),
-            "lost": t[3] - (t[2] // 3) - (t[2] % 3),
-            "goals_for": 30 + (8 - i) * 3,
-            "goals_against": 15 + i * 4,
-            "goal_diff": (30 + (8 - i) * 3) - (15 + i * 4),
-            "form": "WWDLW" if i < 3 else "DWLLL",
-        }
-        for i, t in enumerate(teams)
+        {"id":"mock_01","date":add(1),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Demo","home_team":"NK Maribor","home_team_id":1601,"away_team":"NK Koper","away_team_id":2279,"venue":"Ljudski vrt"},
+        {"id":"mock_02","date":add(2),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Demo","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Celje","away_team_id":1594,"venue":"Stožice"},
+        {"id":"mock_03","date":add(3),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Demo","home_team":"NK Bravo","home_team_id":10203,"away_team":"NK Domžale","away_team_id":1595,"venue":"ZAK"},
+        {"id":"mock_04","date":add(4),"status":"NS","league":"PrvaLiga","league_id":218,"round":"Demo","home_team":"NK Mura","home_team_id":1600,"away_team":"NK Radomlje","away_team_id":14370,"venue":"Fazanerija"},
+        {"id":"mock_05","date":add(3),"status":"NS","league":"2SNL","league_id":219,"round":"Demo","home_team":"NK Nafta 1903","home_team_id":14372,"away_team":"NK Aluminij","away_team_id":10576,"venue":"Lendava"},
+        {"id":"mock_06","date":add(5),"status":"NS","league":"2SNL","league_id":219,"round":"Demo","home_team":"NK Drava Ptuj","home_team_id":10578,"away_team":"NK Ankaran","away_team_id":14371,"venue":"Ptuj"},
     ]
+
+def _mock_form(team_id: int = 0) -> dict:
+    # Deterministic per team_id so same team always gets same mock form
+    seed  = team_id % 7
+    pools = [
+        ["W","W","W","D","W","L","W"],
+        ["W","D","W","W","L","W","D"],
+        ["D","W","L","W","W","D","W"],
+        ["L","W","D","L","W","W","W"],
+        ["W","L","W","D","L","W","D"],
+        ["D","D","W","L","D","W","L"],
+        ["L","W","L","W","D","L","W"],
+    ]
+    results  = pools[seed]
+    scored   = [2,1,3,1,2,0,2][seed:] + [2,1,3,1,2,0,2][:seed]
+    conceded = [0,1,1,2,1,2,1][seed:] + [0,1,1,2,1,2,1][:seed]
+    n = 7
+    return {
+        "form":           results,
+        "form_string":    "".join(results[-5:]),
+        "avg_scored":     round(sum(scored)   / n, 2),
+        "avg_conceded":   round(sum(conceded) / n, 2),
+        "clean_sheets":   sum(1 for g in conceded if g == 0),
+        "btts_count":     sum(1 for s,c in zip(scored,conceded) if s>0 and c>0),
+        "games_analyzed": n,
+    }
+
+def _mock_h2h() -> dict:
+    return {"total_matches":8,"home_wins":4,"draws":2,"away_wins":2,
+            "avg_goals_h2h":2.4,"btts_pct":62.5,"over25_pct":50.0}
+
+def _mock_standings() -> list[dict]:
+    teams = [
+        ("NK Olimpija Ljubljana",1598,58),("NK Maribor",1601,54),
+        ("NK Celje",1594,48),("NK Koper",2279,42),
+        ("NK Bravo",10203,36),("NK Mura",1600,30),
+        ("NK Domžale",1595,28),("NK Radomlje",14370,20),
+    ]
+    return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":27,
+             "won":t[2]//3,"drawn":t[2]%3,"lost":27-t[2]//3-t[2]%3,
+             "goals_for":55-i*4,"goals_against":18+i*4,"goal_diff":37-i*8,
+             "form":"WWDWW" if i<3 else "WDLLL"}
+            for i,t in enumerate(teams)]
