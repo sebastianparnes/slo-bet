@@ -348,12 +348,36 @@ def _mock_matches(league_name: str = None) -> list[dict]:
         return [m for m in all_m if m["league"] == league_name]
     return all_m
 
+# Real-world inspired form data per team (based on actual 2025/26 standings)
+_TEAM_FORM_DATA = {
+    1598: {"form":["W","W","D","W","W","W","D"],"sc":[3,2,1,2,3,1,2],"cc":[0,1,1,0,1,0,1]},  # Olimpija — leader
+    1601: {"form":["W","D","W","L","W","W","W"],"sc":[2,1,2,0,1,2,2],"cc":[0,1,0,2,0,1,1]},  # Maribor — 3rd
+    1594: {"form":["W","W","W","D","L","W","W"],"sc":[2,3,1,1,0,2,1],"cc":[0,0,0,1,1,1,0]},  # Celje — 2nd
+    2279: {"form":["W","D","L","W","W","D","W"],"sc":[1,1,0,2,2,1,1],"cc":[0,1,2,0,1,1,0]},  # Koper — 4th
+    10203:{"form":["D","W","L","D","W","W","L"],"sc":[1,2,0,1,2,1,1],"cc":[1,0,1,1,0,2,2]},  # Bravo — 5th
+    10576:{"form":["W","L","D","W","L","W","D"],"sc":[1,0,1,2,0,1,1],"cc":[0,2,1,1,2,0,1]},  # Aluminij — 6th
+    1600: {"form":["L","D","W","L","D","W","L"],"sc":[0,1,2,1,0,1,0],"cc":[1,1,0,2,1,0,2]},  # Mura — 7th
+    14370:{"form":["L","L","D","W","L","D","L"],"sc":[0,1,1,2,0,0,1],"cc":[2,3,1,1,2,1,2]},  # Radomlje — 8th
+    99991:{"form":["D","W","L","D","W","L","D"],"sc":[1,2,0,1,1,0,0],"cc":[1,0,2,1,0,2,1]},  # Primorje
+    99993:{"form":["L","D","W","L","L","W","D"],"sc":[0,1,1,0,1,2,1],"cc":[2,1,0,2,2,0,1]},  # Gorica
+    14372:{"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},  # Nafta
+    14371:{"form":["L","W","L","D","W","L","W"],"sc":[0,2,1,1,1,0,2],"cc":[2,0,2,1,0,2,1]},  # Ankaran
+    10578:{"form":["D","L","W","D","L","W","D"],"sc":[1,0,2,1,0,1,0],"cc":[1,2,0,1,2,0,1]},  # Drava Ptuj
+    1595: {"form":["W","W","L","W","D","W","L"],"sc":[2,3,0,1,1,2,0],"cc":[0,1,2,0,1,0,2]},  # Domžale
+}
+
 def _mock_form(team_id:int=0) -> dict:
-    seed=team_id%7
-    pools=[["W","W","W","D","W","L","W"],["W","D","W","W","L","W","D"],["D","W","L","W","W","D","W"],["L","W","D","L","W","W","W"],["W","L","W","D","L","W","D"],["D","D","W","L","D","W","L"],["L","W","L","W","D","L","W"]]
-    sc=[2,1,3,1,2,0,2][seed:]+[2,1,3,1,2,0,2][:seed]
-    cc=[0,1,1,2,1,2,1][seed:]+[0,1,1,2,1,2,1][:seed]
-    r=pools[seed];n=7
+    data = _TEAM_FORM_DATA.get(team_id)
+    if data:
+        r, sc, cc = data["form"], data["sc"], data["cc"]
+    else:
+        # Unknown team — vary by hash
+        seed = team_id % 7
+        pools=[["W","W","W","D","W","L","W"],["W","D","W","W","L","W","D"],["D","W","L","W","W","D","W"],["L","W","D","L","W","W","W"],["W","L","W","D","L","W","D"],["D","D","W","L","D","W","L"],["L","W","L","W","D","L","W"]]
+        sc=[2,1,3,1,2,0,2][seed:]+[2,1,3,1,2,0,2][:seed]
+        cc=[0,1,1,2,1,2,1][seed:]+[0,1,1,2,1,2,1][:seed]
+        r=pools[seed]
+    n=len(r)
     return {"form":r,"form_string":"".join(r[-5:]),"avg_scored":round(sum(sc)/n,2),"avg_conceded":round(sum(cc)/n,2),"clean_sheets":sum(1 for g in cc if g==0),"btts_count":sum(1 for s,c in zip(sc,cc) if s>0 and c>0),"games_analyzed":n}
 
 def _mock_h2h() -> dict:
