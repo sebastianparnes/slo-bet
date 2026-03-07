@@ -19,7 +19,18 @@ import re
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-WORKER_URL = os.getenv("XBET_WORKER_URL", "").rstrip("/")
+WORKER_URL  = os.getenv("XBET_WORKER_URL", "").rstrip("/")
+SS_BASE_URL = "https://www.sofascore.com/api/v1"
+
+SS_HEADERS = {
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer":         "https://www.sofascore.com/",
+    "Origin":          "https://www.sofascore.com",
+    "Cache-Control":   "no-cache",
+    "Pragma":          "no-cache",
+}
 
 # ─── IDs de Sofascore por liga ────────────────────────────────────────────────
 
@@ -59,15 +70,13 @@ def _cset(k, v, ttl=300):
 # ─── HTTP helper ──────────────────────────────────────────────────────────────
 
 async def _ss(path: str, ttl: int = 300) -> Optional[dict]:
-    """Llama a /sofascore/<path> en el worker."""
-    if not WORKER_URL:
-        return None
+    """Llama directamente a Sofascore API desde Railway (IPs de servidor, no bloqueadas)."""
     cached = _cget(path)
     if cached is not None:
         return cached
-    url = f"{WORKER_URL}/sofascore{path}"
+    url = f"{SS_BASE_URL}{path}"
     try:
-        async with httpx.AsyncClient(timeout=15, headers=HEADERS) as c:
+        async with httpx.AsyncClient(timeout=15, headers=SS_HEADERS, follow_redirects=True) as c:
             r = await c.get(url)
         if r.status_code != 200:
             print(f"[SS] {r.status_code} para {path}")
