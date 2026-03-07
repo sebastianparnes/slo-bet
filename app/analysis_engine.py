@@ -155,10 +155,11 @@ def _xg_from_form(home_form: dict, away_form: dict) -> tuple[float, float]:
 
 def _form_to_pts(form: list[str]) -> float:
     weights = [0.10, 0.15, 0.20, 0.25, 0.30]
-    pts_map = {"W": 3, "D": 1, "L": 0}
+    # Acepta inglés (W/D/L) y español (G/E/P)
+    pts_map = {"W": 3, "D": 1, "L": 0, "G": 3, "E": 1, "P": 0}
     recent = (form or [])[-5:]
     while len(recent) < 5:
-        recent.insert(0, "D")
+        recent.insert(0, "E")
     return sum(weights[i] * pts_map.get(r, 1) for i, r in enumerate(recent))
 
 
@@ -176,9 +177,11 @@ def _form_component(home_form: dict, away_form: dict) -> tuple[float, dict]:
         "away_avg_scored":    away_form.get("avg_scored", 0),
         "home_avg_conceded":  home_form.get("avg_conceded", 0),
         "away_avg_conceded":  away_form.get("avg_conceded", 0),
-        "home_source":        home_form.get("source", "unknown"),
-        "away_source":        away_form.get("source", "unknown"),
-        "score_out_of_25":    round(score, 2),
+        "home_source":           home_form.get("source", "unknown"),
+        "away_source":           away_form.get("source", "unknown"),
+        "home_recent_matches":   home_form.get("recent_matches", []),
+        "away_recent_matches":   away_form.get("recent_matches", []),
+        "score_out_of_25":       round(score, 2),
     }
 
 
@@ -262,7 +265,8 @@ def _home_advantage_component(league: str) -> tuple[float, dict]:
 def _consistency_component(home_form: dict, away_form: dict) -> tuple[float, dict]:
     def var_score(form):
         if not form: return 0.5
-        pts = [{"W": 3, "D": 1, "L": 0}[r] for r in form if r in "WDL"]
+        pts_map = {"W": 3, "D": 1, "L": 0, "G": 3, "E": 1, "P": 0}
+        pts = [pts_map[r] for r in form if r in pts_map]
         if len(pts) < 2: return 0.5
         mu  = sum(pts) / len(pts)
         var = sum((p - mu) ** 2 for p in pts) / len(pts)

@@ -38,42 +38,35 @@ async def _analyse(m: dict) -> dict:
     league   = m.get("league", "PrimeraDivision")
     event_id = m.get("sofascore_id")
     try:
+        hf = af = None
         if event_id:
             hf, af = await asyncio.gather(
                 fetch_team_form_for_event(event_id, True),
                 fetch_team_form_for_event(event_id, False),
             )
-        else:
-            hf = af = None
+        if not hf or "avg_scored" not in (hf or {}):
+            hf = await fetch_team_form(m["home_team_id"], league)
+        if not af or "avg_scored" not in (af or {}):
+            af = await fetch_team_form(m["away_team_id"], league)
 
-        if not hf or not af:
-            hf, af = await asyncio.gather(
-                fetch_team_form(m["home_team_id"], league),
-                fetch_team_form(m["away_team_id"], league),
-            )
-
-        h2h = await fetch_h2h(event_id, m["home_team"], m["away_team"]) \
-            if event_id else {"total_matches": 0, "source": "no_event_id"}
-
-        standings, xbet_odds = await asyncio.gather(
+        h2h, standings, xbet_odds = await asyncio.gather(
+            fetch_h2h(event_id, m["home_team"], m["away_team"], m["home_team_id"], m["away_team_id"]),
             fetch_standings(league),
             get_odds_for(m["home_team"], m["away_team"], league),
         )
-
         return analyze_match(m, _enrich(hf), _enrich(af), h2h, standings, xbet_odds)
-
     except Exception as e:
-        return {
-            "match_id": m["id"], "home_team": m["home_team"], "away_team": m["away_team"],
-            "league": league, "match_date": m.get("date", ""), "error": str(e),
-        }
+        return {"match_id": m["id"], "home_team": m["home_team"], "away_team": m["away_team"],
+                "league": league, "match_date": m.get("date", ""), "error": str(e)}
 
 
 def _enrich(f: dict) -> dict:
     if not f:
-        return {"form": [], "form_string": "?????", "avg_scored": 1.3, "avg_conceded": 1.3,
-                "clean_sheets": 0, "btts_count": 0, "games_analyzed": 0, "source": "empty"}
+        return {"form": [], "form_string": "?????", "avg_scored": 1.2, "avg_conceded": 1.2,
+                "clean_sheets": 0, "btts_count": 0, "games_analyzed": 0, "recent_matches": [], "source": "empty"}
     if "avg_scored" not in f:
-        f.update({"avg_scored": 1.3, "avg_conceded": 1.3, "clean_sheets": 0,
-                  "btts_count": 0, "games_analyzed": len(f.get("form", []))})
+        f.update({"avg_scored": 1.3, "avg_conceded": 1.2, "clean_sheets": 0,
+                  "btts_count": 0, "games_analyzed": len(f.get("form", [])), "recent_matches": []})
+    if "recent_matches" not in f:
+        f["recent_matches"] = []
     return f
