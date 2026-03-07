@@ -216,7 +216,20 @@ body{
 .scbar{height:3px;background:var(--rule);margin-top:5px}
 .scfill{height:100%;background:var(--green);transition:width .6s ease}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.fbox{background:var(--surf);border:1px solid var(--rule);padding:10px 12px}
+.fbox{background:var(--surf);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.fbox:hover{border-color:var(--green)}
+.fbox.open{border-color:var(--green)}
+.fmatches{display:none;margin-top:10px;border-top:1px solid var(--rule);padding-top:8px;display:none}
+.fmatch{font-family:var(--mono);font-size:10px;display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08)}
+.fmatch:last-child{border:none}
+.fmr{width:18px;height:18px;border-radius:2px;display:grid;place-items:center;font-size:9px;font-weight:700;flex-shrink:0;color:#fff}
+.fmr.g{background:var(--green);color:var(--ink)}
+.fmr.e{background:#b5860d}
+.fmr.p{background:var(--red)}
+.fmteams{flex:1;color:var(--ink)}
+.fmteams strong{font-weight:600}
+.fmscore{font-weight:700;color:var(--ink);flex-shrink:0}
+.fmdate{color:var(--dim);font-size:9px;flex-shrink:0}
 .fteam{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
 .fdots{font-size:14px;letter-spacing:4px}
 .fstat{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px}
@@ -359,46 +372,15 @@ select option{background:var(--card)}
   .prow{grid-template-columns:repeat(5,1fr)}
   .prow .pb{display:block}
 }
-
-/* ── COUNTRY BAR ── */
-.country-bar{background:#111;display:flex;align-items:center;justify-content:center;gap:2px;padding:4px 16px;border-bottom:1px solid #222}
-.cb{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
-  background:transparent;border:1px solid transparent;color:#555;padding:4px 14px;
-  cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
-.cb:hover{color:#aaa;border-color:#333}
-.cb.active-slo{color:var(--lime);border-color:var(--lime);background:rgba(184,247,60,0.06)}
-.cb-sep{width:1px;height:18px;background:#333;margin:0 4px}
-
-/* ── Score cards clickeable ── */
-.sc{background:var(--surf);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border .15s;position:relative}
-.sc:hover{border-color:var(--green)}
-.sc-tip{display:none;font-size:10px;font-style:normal}
-.sc.open .sc-tip{display:block}
-.sc-expand{position:absolute;top:8px;right:8px;font-size:10px;color:var(--dim);font-family:var(--mono)}
-
-/* ── Score breakdown panel ── */
-.sc-panel{
-  background:var(--ink);color:var(--paper);
-  border:1px solid var(--green);padding:12px;
-  margin-top:8px;font-family:var(--mono);font-size:11px;line-height:1.7;
-  display:none;
-}
-.sc-panel.open{display:block}
-.sc-panel-line{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
-.sc-panel-line:last-child{border:none}
-.sc-panel-k{color:#888}
-.sc-panel-v{color:var(--lime);text-align:right;font-weight:500}
 </style>
 </head>
 <body>
 
-<!-- Country bar -->
-<div class="country-bar">
-  <a href="/" class="cb active-slo">🇸🇮 SLO·BET</a>
-  <div class="cb-sep"></div>
-  <a href="/arg" class="cb">🇦🇷 ARG·BET</a>
+<div style="background:#111;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 16px;border-bottom:1px solid #222">
+  <a href="/" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:rgba(184,247,60,0.08);border:1px solid var(--lime);color:var(--lime);padding:4px 16px;text-decoration:none">🇸🇮 SLO·BET</a>
+  <div style="width:1px;height:16px;background:#333;margin:0 6px"></div>
+  <a href="/arg" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:transparent;border:1px solid #333;color:#555;padding:4px 16px;text-decoration:none">🇦🇷 ARG·BET</a>
 </div>
-
 <header class="hdr">
   <div class="hdr-in">
     <a class="logo" href="/">
@@ -696,24 +678,20 @@ function renderModal(d) {
   const p=d.probabilities||{}, bd=d.score_breakdown||{}, recs=d.recommendations||[], odds=d.xbet_odds;
   const pc=v=>v>=50?'var(--green)':v>=35?'#b5860d':'var(--dim)';
 
-  // Colores forma: G=verde, E=amarillo, P=rojo
   const fcol=c=>(c==='G'||c==='W')?'var(--green)':(c==='E'||c==='D')?'#b5860d':'var(--red)';
   const flbl=c=>(c==='G'||c==='W')?'G':(c==='E'||c==='D')?'E':'P';
-
-  // Forma clickeable con tooltip del partido (hover muestra el resultado)
-  function fdClickable(formStr, recentMatches) {
-    return (formStr||'?????').split('').map((c,i)=>{
-      const m=recentMatches&&recentMatches[i];
-      const tip=m?`title="${m.home} ${m.score} ${m.away} (${m.date})"`:'' ;
-      return `<span ${tip} style="color:${fcol(c)};font-weight:600;cursor:${m?'help':'default'};${m?'border-bottom:1px dotted '+fcol(c)+';':''}">${flbl(c)}</span>`;
-    }).join('<span style="opacity:.2"> </span>');
-  }
-
+  const fdDots=s=>(s||'?????').split('').map(c=>`<span style="color:${fcol(c)};font-weight:700">${flbl(c)}</span>`).join('<span style="opacity:.2"> </span>');
+  const fdList=rm=>{
+    if(!rm||!rm.length) return '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding:4px 0">Sin detalle disponible</div>';
+    return rm.map(m=>{
+      const r=flbl(m.result||'P'), cls=r==='G'?'g':r==='E'?'e':'p';
+      const local=m.was_home?`<strong>${m.home}</strong>`:m.home;
+      const visit=m.was_home?m.away:`<strong>${m.away}</strong>`;
+      return `<div class="fmatch"><div class="fmr ${cls}">${r}</div><div class="fmteams">${local} vs ${visit}</div><div class="fmscore">${m.score}</div><div class="fmdate">${m.date}</div></div>`;
+    }).join('');
+  };
   const hfRecent = bd.form?.home_recent_matches || [];
   const afRecent = bd.form?.away_recent_matches || [];
-
-  // Store for clickable score panels
-  _currentBd = bd;
 
   const si=[{l:'Forma',v:bd.form?.score_out_of_25,mx:25},{l:'H2H',v:bd.h2h?.score_out_of_20,mx:20},{l:'Tabla',v:bd.standings?.score_out_of_20,mx:20},{l:'Goles',v:bd.goals?.score_out_of_20,mx:20},{l:'Local',v:bd.home_advantage?.score_out_of_10,mx:10},{l:'Consist.',v:bd.consistency?.score_out_of_5,mx:5}];
 
@@ -749,158 +727,29 @@ function renderModal(d) {
       <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${pc(p.btts||0)}">${p.btts||0}%</div></div>
     </div>
     <div class="sec">Cuotas 1xbet</div>${oddsHTML}
-    <div class="sec">Score ${bd.overall||0}/100 <span style='font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal'>— click en cada componente para ver el detalle</span></div>
-    <div id="sc-grid" class="sgrid"></div>
-    <div id="sc-detail-panel" class="sc-panel"></div>
-    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover para ver el partido</span></div>
+    <div class="sec">Score ${bd.overall||0}/100</div>
+    <div class="sgrid">${si.map(s=>`<div class="sc"><div class="scl">${s.l}</div><div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div><div class="scbar"><div class="scfill" style="width:${((s.v||0)/s.mx*100).toFixed(0)}%"></div></div></div>`).join('')}</div>
+    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— click para ver los partidos</span></div>
     <div class="frow">
-      <div class="fbox"><div class="fteam">${d.home_team}</div><div class="fdots">${fdClickable(bd.form?.home_form,hfRecent)}</div><div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div></div>
-      <div class="fbox"><div class="fteam">${d.away_team}</div><div class="fdots">${fdClickable(bd.form?.away_form,afRecent)}</div><div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div></div>
+      <div class="fbox" id="fb-h" onclick="toggleFbox('h')">
+        <div class="fteam">${d.home_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
+        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.home_form)}</div>
+        <div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div>
+        <div class="fmatches" id="fm-h">${fdList(hfRecent)}</div>
+      </div>
+      <div class="fbox" id="fb-a" onclick="toggleFbox('a')">
+        <div class="fteam">${d.away_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
+        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.away_form)}</div>
+        <div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div>
+        <div class="fmatches" id="fm-a">${fdList(afRecent)}</div>
+      </div>
     </div>
     ${h2hHTML}
     <div class="sec">Recomendaciones</div>
     <div class="rlist">${recs.map((r,i)=>`<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}"><div class="rihead"><div><div class="ritype">${r.bet_type.replace(/_/g,' ')}</div><div class="riname">${r.label}</div></div><div class="rbadges">${r.is_value?`<span class="badge b-ev">EV+${r.ev}</span>`:''}${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}<span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span><span class="badge b-conf">${Math.round(r.confidence)}%</span></div></div><div>${(r.reasoning||[]).map(rs=>`<div class="rreason">${rs}</div>`).join('')}</div>${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}</div>`).join('')}</div>
     ${filteredWarnings.length?`<div style="margin-top:12px">${filteredWarnings.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
-  renderScoreGrid(bd);
 }
-
-/* ── Score grid (clickeable) ── */
-const _SC_EXPLAIN = {
-  form: {
-    title: 'Forma Reciente',
-    desc: (bd) => {
-      const f = bd.form || {};
-      return [
-        ['Local forma', f.home_form || '—'],
-        ['Local pts ponderados', f.home_weighted_pts?.toFixed(2) + '/3.0' || '—'],
-        ['Visitante forma', f.away_form || '—'],
-        ['Visitante pts ponderados', f.away_weighted_pts?.toFixed(2) + '/3.0' || '—'],
-        ['Fuente local', f.home_source || '—'],
-        ['Fuente visitante', f.away_source || '—'],
-        ['Cómo se calcula', 'Últimos 5 partidos · pesos 10/15/20/25/30% (más reciente = más peso)'],
-      ];
-    }
-  },
-  h2h: {
-    title: 'H2H — Historial',
-    desc: (bd) => {
-      const h = bd.h2h || {};
-      if (!h.total_matches) return [['Estado', 'Sin enfrentamientos previos → puntaje neutral (10/20)']];
-      return [
-        ['Partidos analizados', h.total_matches],
-        ['Gana local', h.home_wins + ' (' + ((h.home_wins/h.total_matches*100)|0) + '%)'],
-        ['Empate', h.draws + ' (' + ((h.draws/h.total_matches*100)|0) + '%)'],
-        ['Gana visitante', h.away_wins + ' (' + ((h.away_wins/h.total_matches*100)|0) + '%)'],
-        ['Promedio goles', h.avg_goals_h2h],
-        ['BTTS%', h.btts_pct + '%'],
-        ['Over 2.5%', h.over25_pct + '%'],
-        ['Fuente', h.source || '—'],
-        ['Cómo se calcula', 'Dominio local en H2H → puntos arriba/abajo de 10 (50% neutral)'],
-      ];
-    }
-  },
-  standings: {
-    title: 'Posición en Tabla',
-    desc: (bd) => {
-      const s = bd.standings || {};
-      return [
-        ['Posición local', s.home_rank || '—'],
-        ['Posición visitante', s.away_rank || '—'],
-        ['Puntos local', s.home_points || '—'],
-        ['Puntos visitante', s.away_points || '—'],
-        ['Diferencia de rango', s.rank_diff ?? '—'],
-        ['Fuente', s.source || '—'],
-        ['Cómo se calcula', 'Diferencia de posiciones normalizada → cuanto mejor ranking relativo = más puntos'],
-      ];
-    }
-  },
-  goals: {
-    title: 'Estadísticas de Goles',
-    desc: (bd) => {
-      const g = bd.goals || {};
-      return [
-        ['xG estimado local', g.home_xg || '—'],
-        ['xG estimado visitante', g.away_xg || '—'],
-        ['Prob. +2.5 goles', (g.over25_prob*100)?.toFixed(1) + '%' || '—'],
-        ['Prob. BTTS', (g.btts_prob*100)?.toFixed(1) + '%' || '—'],
-        ['Modelo', 'Poisson bivariado con xG basado en promedios de goles anotados/encajados'],
-        ['Puntaje', 'Basado en ventaja goleadora local vs visitante'],
-      ];
-    }
-  },
-  home_advantage: {
-    title: 'Factor Local',
-    desc: (bd) => {
-      const h = bd.home_advantage || {};
-      return [
-        ['Tasa histórica local', (h.league_home_rate*100)?.toFixed(1) + '%' || '—'],
-        ['Liga', h.league || '—'],
-        ['Cómo se calcula', 'PrvaLiga 44% · 2SNL 41% · Primera Div 46% · Primera Nac 43% de victorias locales históricas'],
-      ];
-    }
-  },
-  consistency: {
-    title: 'Consistencia',
-    desc: (bd) => {
-      const c = bd.consistency || {};
-      return [
-        ['Consistencia local', c.home_consistency + '%' || '—'],
-        ['Consistencia visitante', c.away_consistency + '%' || '—'],
-        ['Cómo se calcula', 'Varianza de resultados en los últimos 7 partidos · baja varianza = mayor consistencia'],
-      ];
-    }
-  },
-};
-
-let _openScKey = null;
-
-function renderScoreGrid(bd) {
-  const keys = ['form','h2h','standings','goals','home_advantage','consistency'];
-  const labels = ['FORMA','H2H','TABLA','GOLES','LOCAL','CONSIST.'];
-  const maxes  = [25,20,20,20,10,5];
-  const dataKeys = ['form','h2h','standings','goals','home_advantage','consistency'];
-
-  const grid = document.getElementById('sc-grid');
-  grid.innerHTML = keys.map((k,i) => {
-    const v = bd[k]?.score_out_of_25 ?? bd[k]?.score_out_of_20 ?? bd[k]?.score_out_of_10 ?? bd[k]?.score_out_of_5 ?? 0;
-    const pct = Math.min((v/maxes[i])*100,100).toFixed(0);
-    return `<div class="sc" onclick="toggleScoreDetail('${k}',_currentBd)" data-key="${k}">
-      <div class="sc-expand">▾</div>
-      <div class="scl">${labels[i]}</div>
-      <div class="scv">${(v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${maxes[i]}</span></div>
-      <div class="scbar"><div class="scfill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
-}
-
-let _currentBd = {};
-
-function toggleScoreDetail(key, bd) {
-  const panel = document.getElementById('sc-detail-panel');
-  const explain = _SC_EXPLAIN[key];
-  if (!explain) return;
-
-  // Highlight active card
-  document.querySelectorAll('#sc-grid .sc').forEach(el => {
-    el.classList.toggle('open', el.dataset.key === key && _openScKey !== key);
-  });
-
-  if (_openScKey === key) {
-    panel.classList.remove('open');
-    panel.innerHTML = '';
-    _openScKey = null;
-    return;
-  }
-  _openScKey = key;
-
-  const rows = explain.desc(bd);
-  panel.innerHTML = `<strong style="font-family:var(--mono);font-size:11px;color:var(--lime);letter-spacing:1px">${explain.title.toUpperCase()}</strong>
-    <div style="margin-top:8px">${rows.map(([k,v])=>`<div class="sc-panel-line"><span class="sc-panel-k">${k}</span><span class="sc-panel-v">${v}</span></div>`).join('')}</div>`;
-  panel.classList.add('open');
-}
-
-
 /* ── Bet modal ── */
 function openBetModal(pre={}) {
   _pre=pre;
@@ -1103,6 +952,18 @@ updateSel();
 loadMatches();
 // Poll for results every 15 min if page is open
 setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll()}, 15*60*1000);
+
+function toggleFbox(side) {
+  ['h','a'].forEach(s => {
+    const b=document.getElementById('fb-'+s), m=document.getElementById('fm-'+s);
+    if(!b||!m) return;
+    if(s===side && !b.classList.contains('open')) {
+      b.classList.add('open'); m.style.display='block';
+    } else {
+      b.classList.remove('open'); m.style.display='none';
+    }
+  });
+}
 </script>
 </body>
 </html>

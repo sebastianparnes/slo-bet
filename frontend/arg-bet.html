@@ -181,25 +181,6 @@ body::before {
 }
 .pill:hover{border-color:var(--cel3);color:var(--cel)}
 .pill.on{background:rgba(116,194,232,0.12);border-color:var(--cel);color:var(--cel)}
-/* ── SEARCH ── */
-.search-wrap{padding:8px 0 2px}
-.search-input{
-  width:100%;background:var(--bg3);border:1.5px solid var(--rule);
-  color:var(--white);font-family:var(--mono);font-size:12px;letter-spacing:.3px;
-  padding:8px 12px 8px 34px;outline:none;transition:border .15s;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236a8aaa' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:10px center;
-}
-.search-input:focus{border-color:var(--cel)}
-.search-input::placeholder{color:var(--dim)}
-/* ── H2H match list ── */
-.h2h-matches{margin-top:8px;display:flex;flex-direction:column;gap:3px}
-.h2hm{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--bg2);gap:6px;border:1px solid var(--rule)}
-.h2hm-score{color:var(--white);font-weight:600;flex-shrink:0}
-.h2hm-teams{display:flex;flex:1;justify-content:space-between;gap:4px;min-width:0}
-.h2hm-teams span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
-.h2hm-date{opacity:.5;flex-shrink:0}
-
 .btn-ref{
   margin-left:auto;font-family:var(--mono);font-size:10px;
   letter-spacing:1px;text-transform:uppercase;
@@ -326,7 +307,20 @@ body::before {
 .scfill{height:100%;background:linear-gradient(90deg, var(--cel3), var(--cel));transition:width .6s ease}
 
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.fbox{background:var(--bg3);border:1px solid var(--rule);padding:10px 12px}
+.fbox{background:var(--bg3);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.fbox:hover{border-color:var(--cel)}
+.fbox.open{border-color:var(--cel)}
+.fmatches{display:none;margin-top:10px;border-top:1px solid var(--rule);padding-top:8px}
+.fmatch{font-family:var(--mono);font-size:10px;display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)}
+.fmatch:last-child{border:none}
+.fmr{width:18px;height:18px;border-radius:2px;display:grid;place-items:center;font-size:9px;font-weight:700;flex-shrink:0}
+.fmr.g{background:var(--cel);color:#0f1923}
+.fmr.e{background:var(--gold);color:#0f1923}
+.fmr.p{background:var(--red);color:#fff}
+.fmteams{flex:1;color:var(--white);font-size:10px}
+.fmteams strong{font-weight:600}
+.fmscore{font-weight:700;color:var(--white);flex-shrink:0}
+.fmdate{color:var(--dim);font-size:9px;flex-shrink:0}
 .fteam{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
 .fdots{font-size:14px;letter-spacing:4px}
 .fstat{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px}
@@ -520,17 +514,6 @@ select option{background:var(--bg2)}
   .prow{grid-template-columns:repeat(5,1fr)}
   .prow .pb{display:block}
 }
-
-.sc{background:var(--bg3);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border .15s;position:relative}
-.sc:hover{border-color:var(--cel)}
-.sc.open{border-color:var(--cel)}
-.sc-expand{position:absolute;top:8px;right:8px;font-size:10px;color:var(--dim);font-family:var(--mono)}
-.sc-panel{background:var(--bg);color:var(--white);border:1px solid var(--cel3);padding:12px;margin-top:8px;font-family:var(--mono);font-size:11px;line-height:1.7;display:none}
-.sc-panel.open{display:block}
-.sc-panel-line{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
-.sc-panel-line:last-child{border:none}
-.sc-panel-k{color:var(--dim)}
-.sc-panel-v{color:var(--cel);text-align:right;font-weight:500}
 </style>
 </head>
 <body>
@@ -542,6 +525,11 @@ select option{background:var(--bg2)}
   <a href="/arg" class="cb active-arg"><span class="cb-flag">🇦🇷</span> ARG·BET</a>
 </div>
 
+<div style="background:#080f18;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 16px;border-bottom:1px solid #1a2a3a">
+  <a href="/" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:transparent;border:1px solid #333;color:#555;padding:4px 16px;text-decoration:none">🇸🇮 SLO·BET</a>
+  <div style="width:1px;height:16px;background:#333;margin:0 6px"></div>
+  <a href="/arg" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:rgba(116,194,232,0.08);border:1px solid var(--cel);color:var(--cel);padding:4px 16px;text-decoration:none">🇦🇷 ARG·BET</a>
+</div>
 <header class="hdr">
   <div class="hdr-in">
     <a class="logo" href="/arg">
@@ -593,12 +581,6 @@ select option{background:var(--bg2)}
       <button class="pill" data-league="PrimeraDivision">Primera Div.</button>
       <button class="pill" data-league="PrimeraNacional">Primera Nac.</button>
       <button class="pill" data-conf="1">⚡ EV+</button>
-    </div>
-    <div class="search-wrap">
-      <input class="search-input" id="search-input" placeholder="Buscar equipo… ej: River, Boca, Racing" oninput="applyF()">
-    </div>
-    <div class="tbar" style="border:none;padding:0;margin-top:0">
-      <div></div>
       <button class="btn-ref" id="btn-ref">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -790,8 +772,6 @@ function applyF() {
   let m=[...allMatches];
   if(leagueF!=='all') m=m.filter(x=>x.league===leagueF);
   if(confF) m=m.filter(x=>x.has_value_bet||(x.overall_confidence||0)>=65);
-  const q=(document.getElementById('search-input')?.value||'').toLowerCase().trim();
-  if(q) m=m.filter(x=>(x.home_team||'').toLowerCase().includes(q)||(x.away_team||'').toLowerCase().includes(q));
   renderCards(m);
 }
 
@@ -835,47 +815,24 @@ function renderModal(d) {
   document.getElementById('modal-title').textContent=`${d.home_team} × ${d.away_team}`;
   const p=d.probabilities||{}, bd=d.score_breakdown||{}, recs=d.recommendations||[], odds=d.xbet_odds;
   const pc=v=>v>=50?'var(--cel)':v>=35?'var(--gold)':'var(--dim)';
-
-  // Colores forma: G=celeste, E=dorado, P=rojo
   const fcol=c=>(c==='G'||c==='W')?'var(--cel)':(c==='E'||c==='D')?'var(--gold)':'var(--red)';
   const flbl=c=>(c==='G'||c==='W')?'G':(c==='E'||c==='D')?'E':'P';
-
-  // Forma clickeable con tooltip del partido
-  function fdClickable(formStr, recentMatches) {
-    return (formStr||'?????').split('').map((c,i)=>{
-      const m=recentMatches&&recentMatches[i];
-      const tip=m?`title="${m.home} ${m.score} ${m.away} (${m.date})"`:'' ;
-      return `<span ${tip} style="color:${fcol(c)};font-weight:600;cursor:${m?'help':'default'};${m?'border-bottom:1px dotted '+fcol(c)+';':''}">${flbl(c)}</span>`;
-    }).join('<span style="opacity:.2"> </span>');
-  }
-
-  const hfRecent = bd.form?.home_recent_matches || [];
-  const afRecent = bd.form?.away_recent_matches || [];
-
-  _currentBd = bd;
-
+  const fdDots=s=>(s||'?????').split('').map(c=>`<span style="color:${fcol(c)};font-weight:700">${flbl(c)}</span>`).join('<span style="opacity:.2"> </span>');
+  const fdList=rm=>{
+    if(!rm||!rm.length) return '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding:4px 0">Sin detalle disponible</div>';
+    return rm.map(m=>{
+      const r=flbl(m.result||'P'), cls=r==='G'?'g':r==='E'?'e':'p';
+      const loc=m.was_home?`<strong>${m.home}</strong>`:m.home;
+      const vis=m.was_home?m.away:`<strong>${m.away}</strong>`;
+      return `<div class="fmatch"><div class="fmr ${cls}">${r}</div><div class="fmteams">${loc} vs ${vis}</div><div class="fmscore">${m.score}</div><div class="fmdate">${m.date}</div></div>`;
+    }).join('');
+  };
+  const hfRecent=bd.form?.home_recent_matches||[];
+  const afRecent=bd.form?.away_recent_matches||[];
   const si=[{l:'Forma',v:bd.form?.score_out_of_25,mx:25},{l:'H2H',v:bd.h2h?.score_out_of_20,mx:20},{l:'Tabla',v:bd.standings?.score_out_of_20,mx:20},{l:'Goles',v:bd.goals?.score_out_of_20,mx:20},{l:'Local',v:bd.home_advantage?.score_out_of_10,mx:10},{l:'Consist.',v:bd.consistency?.score_out_of_5,mx:5}];
-
   const oddsHTML=odds
     ?`<div class="odds-panel"><div class="ob"><div class="obl">1 Local</div><div class="obv">${odds.home||'—'}</div></div><div class="ob"><div class="obl">X Empate</div><div class="obv">${odds.draw||'—'}</div></div><div class="ob"><div class="obl">2 Visita</div><div class="obv">${odds.away||'—'}</div></div><div class="ob"><div class="obl">Over 2.5</div><div class="obv">${odds.over25||'—'}</div></div></div>`
     :`<div class="no-odds">Cuotas de 1xbet no disponibles para este partido.</div>`;
-
-  const h2h=bd.h2h||{};
-  const h2hHTML=(h2h.total_matches||0)>0?`
-    <div class="sec">H2H — Últimos ${h2h.total_matches} enfrentamientos</div>
-    <div class="h2h-row">
-      <div class="h2hc"><div class="h2hl">Local gana</div><div class="h2hv" style="color:var(--cel)">${h2h.home_wins}</div></div>
-      <div class="h2hc"><div class="h2hl">Empate</div><div class="h2hv" style="color:var(--gold)">${h2h.draws}</div></div>
-      <div class="h2hc"><div class="h2hl">Visita gana</div><div class="h2hv" style="color:var(--red)">${h2h.away_wins}</div></div>
-      <div class="h2hc"><div class="h2hl">Goles/p</div><div class="h2hv">${h2h.avg_goals_h2h}</div></div>
-      <div class="h2hc"><div class="h2hl">BTTS%</div><div class="h2hv">${h2h.btts_pct}%</div></div>
-      <div class="h2hc"><div class="h2hl">+2.5%</div><div class="h2hv">${h2h.over25_pct}%</div></div>
-    </div>
-    ${(h2h.recent||[]).length?`<div class="h2h-matches">${h2h.recent.map(r=>`<div class="h2hm"><div class="h2hm-teams"><span>${r.home}</span><span>${r.away}</span></div><div class="h2hm-score">${r.score}</div><div class="h2hm-date">${r.date}</div></div>`).join('')}</div>`:''}`
-  :'';
-
-  const filteredWarnings=(d.warnings||[]).filter(w=>!/h2h|historial/i.test(w));
-
   document.getElementById('modal-body').innerHTML=`
     <div class="sec">Probabilidades</div>
     <div class="prow">
@@ -885,22 +842,32 @@ function renderModal(d) {
       <div class="pb"><div class="pbl">+2.5</div><div class="pbv" style="color:${pc(p.over_2_5||0)}">${p.over_2_5||0}%</div></div>
       <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${pc(p.btts||0)}">${p.btts||0}%</div></div>
     </div>
-    <div class="sec">Cuotas 1xbet</div>${oddsHTML}
-    <div class="sec">Score ${bd.overall||0}/100 <span style='font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal'>— click para ver detalle</span></div>
-    <div id="sc-grid" class="sgrid"></div>
-    <div id="sc-detail-panel" class="sc-panel"></div><div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div><div class="scbar"><div class="scfill" style="width:${((s.v||0)/s.mx*100).toFixed(0)}%"></div></div></div>`).join('')}</div>
-    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover para ver el partido</span></div>
+    <div class="sec">Cuotas 1xbet (live)</div>${oddsHTML}
+    <div class="sec">Score ${bd.overall||0}/100</div>
+    <div class="sgrid">${si.map(s=>`<div class="sc"><div class="scl">${s.l}</div><div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div><div class="scbar"><div class="scfill" style="width:${((s.v||0)/s.mx*100).toFixed(0)}%"></div></div></div>`).join('')}</div>
+    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— click para ver los partidos</span></div>
     <div class="frow">
-      <div class="fbox"><div class="fteam">${d.home_team}</div><div class="fdots">${fdClickable(bd.form?.home_form,hfRecent)}</div><div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div></div>
-      <div class="fbox"><div class="fteam">${d.away_team}</div><div class="fdots">${fdClickable(bd.form?.away_form,afRecent)}</div><div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div></div>
+      <div class="fbox" id="fb-h" onclick="toggleFbox('h')">
+        <div class="fteam">${d.home_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
+        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.home_form)}</div>
+        <div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div>
+        <div class="fmatches" id="fm-h">${fdList(hfRecent)}</div>
+      </div>
+      <div class="fbox" id="fb-a" onclick="toggleFbox('a')">
+        <div class="fteam">${d.away_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
+        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.away_form)}</div>
+        <div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div>
+        <div class="fmatches" id="fm-a">${fdList(afRecent)}</div>
+      </div>
     </div>
-    ${h2hHTML}
+    ${(bd.h2h?.total_matches||0)>0?`<div class="sec">H2H (últimos ${bd.h2h.total_matches})</div><div class="h2h-row"><div class="h2hc"><div class="h2hl">Local</div><div class="h2hv" style="color:var(--cel)">${bd.h2h.home_wins}</div></div><div class="h2hc"><div class="h2hl">Empate</div><div class="h2hv" style="color:var(--gold)">${bd.h2h.draws}</div></div><div class="h2hc"><div class="h2hl">Visita</div><div class="h2hv" style="color:var(--red)">${bd.h2h.away_wins}</div></div><div class="h2hc"><div class="h2hl">Goles/p</div><div class="h2hv">${bd.h2h.avg_goals_h2h}</div></div><div class="h2hc"><div class="h2hl">BTTS%</div><div class="h2hv">${bd.h2h.btts_pct}%</div></div></div>`:''}
     <div class="sec">Recomendaciones</div>
-    <div class="rlist">${recs.map((r,i)=>`<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}"><div class="rihead"><div><div class="ritype">${r.bet_type.replace(/_/g,' ')}</div><div class="riname">${r.label}</div></div><div class="rbadges">${r.is_value?`<span class="badge b-ev">EV+${r.ev}</span>`:''}${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}<span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span><span class="badge b-conf">${Math.round(r.confidence)}%</span></div></div><div>${(r.reasoning||[]).map(rs=>`<div class="rreason">${rs}</div>`).join('')}</div>${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}</div>`).join('')}</div>
-    ${filteredWarnings.length?`<div style="margin-top:12px">${filteredWarnings.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
+    <div class="rlist">${recs.map((r,i)=>`<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}"><div class="rihead"><div><div class="ritype">${r.bet_type.replace('_',' ')}</div><div class="riname">${r.label}</div></div><div class="rbadges">${r.is_value?`<span class="badge b-ev">EV+${r.ev}</span>`:''}${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge b-conf">mín@${r.min_odds}</span>`:'')}<span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span><span class="badge b-conf">${Math.round(r.confidence)}%</span></div></div><div>${(r.reasoning||[]).map(rs=>`<div class="rreason">${rs}</div>`).join('')}</div>${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}</div>`).join('')}</div>
+    ${(d.warnings||[]).length?`<div style="margin-top:12px">${d.warnings.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
-  renderScoreGrid(bd);
-}* ── Bet modal ── */
+}
+
+/* ── Bet modal ── */
 function openBetModal(pre={}) {
   _pre=pre;
   const today=new Date().toISOString().split('T')[0];
@@ -1050,137 +1017,16 @@ updateSel();
 loadMatches();
 setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll()}, 15*60*1000);
 
-/* ── Score grid (clickeable) ── */
-const _SC_EXPLAIN = {
-  form: {
-    title: 'Forma Reciente',
-    desc: (bd) => {
-      const f = bd.form || {};
-      return [
-        ['Local forma', f.home_form || '—'],
-        ['Local pts ponderados', f.home_weighted_pts?.toFixed(2) + '/3.0' || '—'],
-        ['Visitante forma', f.away_form || '—'],
-        ['Visitante pts ponderados', f.away_weighted_pts?.toFixed(2) + '/3.0' || '—'],
-        ['Fuente local', f.home_source || '—'],
-        ['Fuente visitante', f.away_source || '—'],
-        ['Cómo se calcula', 'Últimos 5 partidos · pesos 10/15/20/25/30% (más reciente = más peso)'],
-      ];
+function toggleFbox(side) {
+  ['h','a'].forEach(s => {
+    const b=document.getElementById('fb-'+s), m=document.getElementById('fm-'+s);
+    if(!b||!m) return;
+    if(s===side && !b.classList.contains('open')) {
+      b.classList.add('open'); m.style.display='block';
+    } else {
+      b.classList.remove('open'); m.style.display='none';
     }
-  },
-  h2h: {
-    title: 'H2H — Historial',
-    desc: (bd) => {
-      const h = bd.h2h || {};
-      if (!h.total_matches) return [['Estado', 'Sin enfrentamientos previos → puntaje neutral (10/20)']];
-      return [
-        ['Partidos analizados', h.total_matches],
-        ['Gana local', h.home_wins + ' (' + ((h.home_wins/h.total_matches*100)|0) + '%)'],
-        ['Empate', h.draws + ' (' + ((h.draws/h.total_matches*100)|0) + '%)'],
-        ['Gana visitante', h.away_wins + ' (' + ((h.away_wins/h.total_matches*100)|0) + '%)'],
-        ['Promedio goles', h.avg_goals_h2h],
-        ['BTTS%', h.btts_pct + '%'],
-        ['Over 2.5%', h.over25_pct + '%'],
-        ['Fuente', h.source || '—'],
-        ['Cómo se calcula', 'Dominio local en H2H → puntos arriba/abajo de 10 (50% neutral)'],
-      ];
-    }
-  },
-  standings: {
-    title: 'Posición en Tabla',
-    desc: (bd) => {
-      const s = bd.standings || {};
-      return [
-        ['Posición local', s.home_rank || '—'],
-        ['Posición visitante', s.away_rank || '—'],
-        ['Puntos local', s.home_points || '—'],
-        ['Puntos visitante', s.away_points || '—'],
-        ['Diferencia de rango', s.rank_diff ?? '—'],
-        ['Fuente', s.source || '—'],
-        ['Cómo se calcula', 'Diferencia de posiciones normalizada → mejor ranking relativo = más puntos'],
-      ];
-    }
-  },
-  goals: {
-    title: 'Estadísticas de Goles',
-    desc: (bd) => {
-      const g = bd.goals || {};
-      return [
-        ['xG estimado local', g.home_xg || '—'],
-        ['xG estimado visitante', g.away_xg || '—'],
-        ['Prob. +2.5 goles', (g.over25_prob*100)?.toFixed(1) + '%' || '—'],
-        ['Prob. BTTS', (g.btts_prob*100)?.toFixed(1) + '—' || '—'],
-        ['Modelo', 'Poisson bivariado con xG basado en promedios anotados/encajados'],
-        ['Puntaje', 'Ventaja goleadora local vs visitante normalizada'],
-      ];
-    }
-  },
-  home_advantage: {
-    title: 'Factor Local',
-    desc: (bd) => {
-      const h = bd.home_advantage || {};
-      return [
-        ['Tasa histórica local', (h.league_home_rate*100)?.toFixed(1) + '%' || '—'],
-        ['Liga', h.league || '—'],
-        ['Cómo se calcula', 'Primera Div 46‥ · Primera Nac 43% de victorias locales históricas'],
-      ];
-    }
-  },
-  consistency: {
-    title: 'Consistencia',
-    desc: (bd) => {
-      const c = bd.consistency || {};
-      return [
-        ['Consistencia local', c.home_consistency + '%' || '—'],
-        ['Consistencia visitante', c.away_consistency + '%' || '—'],
-        ['Cómo se calcula', 'Varianza de resultados últimos 7 partidos · baja varianza = mayor consistencia'],
-      ];
-    }
-  },
-};
-
-let _openScKey = null;
-let _currentBd = {};
-
-function renderScoreGrid(bd) {
-  const keys    = ['form','h2h','standings','goals','home_advantage','consistency'];
-  const labels  = ['FORMA','H2H','TABLA','GOLES','LOCAL','CONSIST.'];
-  const maxes   = [25,20,20,20,10,5];
-  const vals    = [
-    bd.form?.score_out_of_25, bd.h2h?.score_out_of_20, bd.standings?.score_out_of_20,
-    bd.goals?.score_out_of_20, bd.home_advantage?.score_out_of_10, bd.consistency?.score_out_of_5
-  ];
-  _openScKey = null;
-  const panel = document.getElementById('sc-detail-panel');
-  if(panel){ panel.classList.remove('open'); panel.innerHTML=''; }
-  const grid = document.getElementById('sc-grid');
-  if(!grid) return;
-  grid.innerHTML = keys.map((k,i) => {
-    const v = vals[i] || 0;
-    const pct = Math.min((v/maxes[i])*100,100).toFixed(0);
-    return `<div class="sc" onclick="toggleScoreDetail('${k}')" data-key="${k}">
-      <div class="sc-expand">+</div>
-      <div class="scl">${labels[i]}</div>
-      <div class="scv">${v.toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${maxes[i]}</span></div>
-      <div class="scbar"><div class="scfill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
-}
-
-function toggleScoreDetail(key) {
-  const panel   = document.getElementById('sc-detail-panel');
-  const explain = _SC_EXPLAIN[key];
-  if (!explain || !panel) return;
-  document.querySelectorAll('#sc-grid .sc').forEach(el => {
-    el.classList.toggle('open', el.dataset.key === key && _openScKey !== key);
   });
-  if (_openScKey === key) {
-    panel.classList.remove('open'); panel.innerHTML = ''; _openScKey = null; return;
-  }
-  _openScKey = key;
-  const rows = explain.desc(_currentBd);
-  panel.innerHTML = `<strong style="font-size:11px;color:var(--cel);letter-spacing:1px">${explain.title.toUpperCase()}</strong>
-    <div style="margin-top:8px">${rows.map(([k,v])=>`<div class="sc-panel-line"><span class="sc-panel-k">${k}</span><span class="sc-panel-v">${v}</span></div>`).join('')}</div>`;
-  panel.classList.add('open');
 }
 </script>
 </body>
