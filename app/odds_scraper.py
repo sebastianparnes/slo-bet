@@ -112,23 +112,12 @@ def _parse_xbet_response(data: dict, league: str) -> list[dict]:
     """
     Parsea la respuesta de /service-api/LineFeed/Get1x2_VZip
     
-    Estructura típica:
-    {
-      "Value": [
-        {
-          "Id": 123456,
-          "O1": "NK Maribor",      ← equipo local
-          "O2": "NK Olimpija",     ← equipo visitante
-          "E": [                   ← eventos/mercados
-            {"T": 1, "C": 2.10},  ← T=1 local, T=2 draw, T=3 away
-            {"T": 2, "C": 3.40},
-            {"T": 3, "C": 3.20},
-          ],
-          "S": 0,  ← 0=previa, 1=live
-          "D": 1748000000  ← timestamp
-        }
-      ]
-    }
+    Campos clave:
+      O1/O2  → nombres de equipos
+      E[]    → mercados: G=1 es 1X2, G=17 es over/under
+      WP     → win probabilities calculadas por xbet {P1, PX, P2}
+      S      → timestamp del partido
+      I      → ID del evento
     """
     matches = []
     events = data.get("Value", []) or []
@@ -140,29 +129,65 @@ def _parse_xbet_response(data: dict, league: str) -> list[dict]:
         if not home or not away:
             continue
 
-        odds = _extract_1x2(ev.get("E", []))
+        e_list = ev.get("E", [])
+        odds_1x2 = _extract_1x2(e_list)
+        odds_ou = _extract_over_under(e_list)
+
+        wp = ev.get("WP", {})
 
         matches.append({
-            "id":      ev.get("Id"),
+            "id":      ev.get("I"),
             "home":    home,
             "away":    away,
             "league":  league,
-            "odds":    odds,
-            "is_live": ev.get("S") == 1,
-            "date":    ev.get("D"),
+            "odds":    {**odds_1x2, **odds_ou},
+            "xbet_probs": {             # probabilidades que calcula xbet internamente
+                "home": round(wp.get("P1", 0) * 100, 1) if wp.get("P1") else None,
+                "draw": round(wp.get("PX", 0) * 100, 1) if wp.get("PX") else None,
+                "away": round(wp.get("P2", 0) * 100, 1) if wp.get("P2") else None,
+            },
+            "stadium": ev.get("MIO", {}).get("Loc"),
+            "round":   ev.get("MIO", {}).get("TSt"),
+            "is_live": ev.get("SS") == 1,
+            "date":    ev.get("S"),
         })
 
     return matches
 
 
+def _extract_over_under(events: list) -> dict:
+    """Extrae over/under 2.5 del mercado G=17."""
+    result = {"over25": None, "under25": None}
+    for e in (events or []):
+        if e.get("G") != 17:
+            continue
+        p = e.get("P")
+        t = e.get("T")
+        c = e.get("C")
+        if p == 2.5 and c and float(c) > 1:
+            if t == 9:
+                result["over25"] = round(float(c), 2)
+            elif t == 10:
+                result["under25"] = round(float(c), 2)
+    return result
+
+
 def _extract_1x2(events: list) -> dict:
-    """Extrae cuotas 1X2 del array de eventos de xbet."""
+    """
+    Extrae cuotas 1X2 del array E[] de ar-xbet.
+    
+    Estructura real:
+      G=1 → mercado 1X2 principal
+      T=1 → local, T=2 → empate, T=3 → visitante
+    """
     result = {"home": None, "draw": None, "away": None}
 
     for e in (events or []):
+        if e.get("G") != 1:
+            continue  # solo mercado 1X2
         t = e.get("T")
         c = e.get("C")
-        if not c or c <= 1:
+        if not c or float(c) <= 1:
             continue
         if t == 1:
             result["home"] = round(float(c), 2)

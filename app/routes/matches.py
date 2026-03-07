@@ -4,7 +4,7 @@ from app.football_api import (
     fetch_h2h, fetch_standings
 )
 from app.analysis_engine import analyze_match
-from app.xbet_scraper import get_odds_for
+from app.odds_scraper import get_odds_for
 import asyncio
 
 router = APIRouter()

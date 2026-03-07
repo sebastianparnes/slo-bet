@@ -1,6 +1,7 @@
 import httpx
+import os
 from fastapi import APIRouter
-from datetime import date, timedelta
+from datetime import date
 
 router = APIRouter()
 
@@ -54,50 +55,30 @@ async def debug():
 
 @router.get("/api/debug/xbet")
 async def debug_xbet():
-    """Test Cloudflare proxy → 1xbet pipeline."""
-    import os, httpx
-    proxy = os.getenv("XBET_PROXY_URL", "")
+    """Test Cloudflare worker → ar-xbet pipeline."""
+    worker_url = os.getenv("XBET_WORKER_URL", "").rstrip("/")
     result = {
-        "proxy_configured": bool(proxy),
-        "proxy_url": proxy or "NOT SET — add XBET_PROXY_URL in Railway variables",
+        "worker_configured": bool(worker_url),
+        "worker_url": worker_url or "NOT SET — agregar XBET_WORKER_URL en Railway variables",
     }
-    if not proxy:
+    if not worker_url:
         return result
 
     async with httpx.AsyncClient(timeout=15) as client:
-        # Test 1: proxy is alive
-        try:
-            r = await client.get(proxy, params={"path": "/en/line/football", "params": ""})
-            result["proxy_status"] = r.status_code
-            result["proxy_response_len"] = len(r.text)
-        except Exception as e:
-            result["proxy_error"] = str(e)
-            return result
-
-        # Test 2: fetch PrvaLiga games
-        try:
-            r2 = await client.get(proxy, params={
-                "path": "/LineFeed/GetChampionship",
-                "params": "championshipId=118593&lng=en&isSubGames=true&GroupEvents=true&allEventsGrouped=true&mode=4"
-            })
-            result["xbet_status"] = r2.status_code
-            if r2.status_code == 200:
-                data = r2.json()
-                games = (data.get("Value", {}).get("TopEvents") or
-                         data.get("Value", {}).get("Events") or
-                         data.get("Value") or [])
-                if isinstance(games, list):
-                    result["games_found"] = len(games)
-                    result["sample"] = [
-                        f"{g.get('O1','?')} vs {g.get('O2','?')}"
-                        for g in games[:5]
-                    ]
-                else:
-                    result["raw_keys"] = list(data.keys())[:10]
-                    result["value_type"] = type(data.get("Value")).__name__
-            else:
-                result["xbet_response"] = r2.text[:300]
-        except Exception as e:
-            result["xbet_error"] = str(e)
+        # Test PrvaLiga
+        for league in ["prva", "2snl"]:
+            try:
+                r = await client.get(f"{worker_url}/xbet/odds", params={"league": league})
+                data = r.json()
+                matches = data.get("Value", []) or []
+                result[f"{league}_status"] = r.status_code
+                result[f"{league}_matches"] = len(matches)
+                result[f"{league}_sample"] = [
+                    f"{m.get('O1','?')} vs {m.get('O2','?')}"
+                    for m in matches[:3]
+                ]
+            except Exception as e:
+                result[f"{league}_error"] = str(e)
 
     return result
+
