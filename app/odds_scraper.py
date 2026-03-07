@@ -20,8 +20,12 @@ from typing import Optional
 WORKER_URL = os.getenv("XBET_WORKER_URL", "").rstrip("/")
 
 LEAGUE_PARAMS = {
-    "PrvaLiga": "prva",
-    "2SNL":     "2snl",
+    # Slovenia
+    "PrvaLiga":        "prva",
+    "2SNL":            "2snl",
+    # Argentina
+    "PrimeraDivision": "primera",
+    "PrimeraNacional": "nacional",
 }
 
 CACHE_TTL = 120  # segundos
