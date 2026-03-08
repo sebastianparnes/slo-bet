@@ -213,6 +213,8 @@ async def _fetch_sf_form(team_id: int, last_n: int = 7) -> dict:
     events = data.get("events", [])
 
     results, scored, conceded, recent = [], [], [], []
+    team_name_found = ""
+
     for ev in events:
         if ev.get("status", {}).get("type") != "finished":
             continue
@@ -227,6 +229,10 @@ async def _fetch_sf_form(team_id: int, last_n: int = 7) -> dict:
         tg = hg if is_home else ag
         og = ag if is_home else hg
         scored.append(tg); conceded.append(og)
+
+        # Capture team name from actual event data
+        if not team_name_found:
+            team_name_found = ht.get("name","") if is_home else at.get("name","")
 
         res = "W" if tg > og else ("D" if tg == og else "L")
         results.append(res)
@@ -464,7 +470,7 @@ _TEAM_FORM_DATA = {
 }
 
 
-def _mock_form(team_id: int = 0) -> dict:
+def _mock_form(team_id: int = 0, team_name: str = "") -> dict:
     data = _TEAM_FORM_DATA.get(team_id)
     if data:
         r, sc, cc = data["form"], data["sc"], data["cc"]
@@ -478,20 +484,22 @@ def _mock_form(team_id: int = 0) -> dict:
         cc = ([0,1,1,2,1,2,1][seed:]+[0,1,1,2,1,2,1][:seed])[:7]
         r  = pools[seed]
     n = len(r)
+    # Don't generate fake recent_matches for unknown teams — return empty
+    tname = team_name or ID_TO_NAME.get(team_id, "")
     recent = []
-    teams  = ["NK Olimpija Ljubljana","NK Maribor","NK Celje","FC Koper","NK Bravo",
-              "NS Mura","NK Aluminij","NK Radomlje","NK Primorje Ajdovščina","ND Gorica"]
-    tname  = ID_TO_NAME.get(team_id, "Equipo")
-    for i, (res, tg, og) in enumerate(zip(r, sc, cc)):
-        opp = teams[(team_id + i) % len(teams)]
-        ih  = i % 2 == 0
-        dt  = (date.today() - timedelta(days=(n-i)*7)).strftime("%d/%m")
-        recent.append({
-            "home": tname if ih else opp, "away": opp if ih else tname,
-            "score": f"{tg}-{og}" if ih else f"{og}-{tg}",
-            "date": dt, "result": res, "is_home": ih, "opponent": opp,
-            "goals_for": tg, "goals_against": og,
-        })
+    if tname:
+        teams = ["NK Olimpija Ljubljana","NK Maribor","NK Celje","FC Koper","NK Bravo",
+                 "NS Mura","NK Aluminij","NK Radomlje","NK Primorje Ajdovščina","ND Gorica"]
+        for i, (res, tg, og) in enumerate(zip(r, sc, cc)):
+            opp = teams[(team_id + i) % len(teams)]
+            ih  = i % 2 == 0
+            dt  = (date.today() - timedelta(days=(n-i)*7)).strftime("%d/%m")
+            recent.append({
+                "home": tname if ih else opp, "away": opp if ih else tname,
+                "score": f"{tg}-{og}" if ih else f"{og}-{tg}",
+                "date": dt, "result": res, "is_home": ih, "opponent": opp,
+                "goals_for": tg, "goals_against": og,
+            })
     return {
         "form": r, "form_string": "".join(r[-5:]),
         "avg_scored": round(sum(sc)/n,2), "avg_conceded": round(sum(cc)/n,2),
