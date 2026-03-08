@@ -169,10 +169,11 @@ def _parse_flashscore_feed(text: str, league_name: str, today: date, cutoff: dat
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
-async def fetch_upcoming_matches(days_ahead: int = 14) -> list[dict]:
+async def fetch_upcoming_matches(leagues=None, days_ahead: int = 14) -> list[dict]:
     all_matches = []
+    league_keys = leagues if leagues else list(LEAGUES.keys())
 
-    for league_name in LEAGUES:
+    for league_name in league_keys:
         fixtures = await _fetch_flashscore_fixtures(league_name)
         if fixtures:
             all_matches.extend(fixtures)
@@ -235,7 +236,10 @@ def _parse_flashscore_results(text: str, league_name: str) -> list[dict]:
     return results
 
 
-async def fetch_team_form(team_id: int, league_id: int, last_n: int = 7) -> dict:
+async def fetch_team_form(team_id: int, league_id=218, last_n: int = 7) -> dict:
+    # Accept league as string name or int id
+    if isinstance(league_id, str):
+        league_id = TOURNAMENT_IDS.get(league_id, 218)
     past = await fetch_past_results(league_id, last_n=60)
     team_name = _team_name_from_id(team_id)
 
@@ -302,7 +306,9 @@ async def fetch_h2h(home_id: int, away_id: int) -> dict:
     }
 
 
-async def fetch_standings(league_id: int) -> list[dict]:
+async def fetch_standings(league_id=218) -> list[dict]:
+    if isinstance(league_id, str):
+        league_id = TOURNAMENT_IDS.get(league_id, 218)
     # TheSportsDB for standings — use mock for 2SNL (no reliable free source)
     if league_id == 219:
         return _mock_standings_2snl()
@@ -443,29 +449,75 @@ def _mock_standings() -> list[dict]:
     return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":25,"won":t[2]//3,"drawn":t[2]%3,"lost":25-t[2]//3-t[2]%3,"goals_for":45-i*4,"goals_against":15+i*4,"goal_diff":30-i*8,"form":"WWDWW" if i<3 else "WDLLL"} for i,t in enumerate(teams)]
 
 
-# ── Compatibility alias (used by matches.py / arg_matches.py) ─────────────
-async def fetch_team_form_for_event(
-    event_id: str,
-    home_team: str, away_team: str,
-    home_team_id: int = 0, away_team_id: int = 0,
-    league_id: int = 218,
-) -> dict:
-    """Fetch form for both teams of an event. Returns {home: {...}, away: {...}}."""
-    home_id = home_team_id or _team_id(home_team)
-    away_id = away_team_id or _team_id(away_team)
-    home_form, away_form = await asyncio.gather(
-        fetch_team_form(home_id, league_id),
-        fetch_team_form(away_id, league_id),
-    )
-    return {"home": home_form, "away": away_form}
+# ── Compatibility functions (used by matches.py / arg_matches.py) ──────────
+async def fetch_team_form_for_event(event_id: str, is_home: bool = True) -> dict:
+    """Called by arg_matches.py as fetch_team_form_for_event(event_id, True/False).
+    Returns None so the caller falls back to fetch_team_form(team_id, league)."""
+    return None
 
 
-async def fetch_h2h_for_event(
-    event_id: str,
-    home_team: str, away_team: str,
-    home_team_id: int = 0, away_team_id: int = 0,
-) -> dict:
-    """Compatibility alias for fetch_h2h."""
-    home_id = home_team_id or _team_id(home_team)
-    away_id = away_team_id or _team_id(away_team)
-    return await fetch_h2h(home_id, away_id)
+async def fetch_h2h(event_id=None, home_team=None, away_team=None,
+                    home_team_id: int = 0, away_team_id: int = 0) -> dict:
+    """Flexible fetch_h2h — called with different signatures from different routes."""
+    # If called as fetch_h2h(home_id, away_id) — old style two ints
+    if isinstance(event_id, int) and isinstance(home_team, int):
+        home_id, away_id = event_id, home_team
+    else:
+        home_id = home_team_id or (0 if not home_team else _team_id(str(home_team)))
+        away_id = away_team_id or (0 if not away_team else _team_id(str(away_team)))
+
+    if not home_id or not away_id:
+        return _mock_h2h()
+
+    home_name = _team_name_from_id(home_id) or str(home_team or "")
+    away_name  = _team_name_from_id(away_id)  or str(away_team  or "")
+    past = await fetch_past_results(218, last_n=80)
+
+    hw = aw = draws = btts = over25 = 0
+    goals, recent = [], []
+    for m in past:
+        ih = _same_team(m["home_team"], home_name) and _same_team(m["away_team"], away_name)
+        ia = _same_team(m["home_team"], away_name) and _same_team(m["away_team"], home_name)
+        if not ih and not ia: continue
+        hg, ag = m["home_goals"], m["away_goals"]
+        total = hg + ag
+        goals.append(total)
+        if total > 2: over25 += 1
+        if hg > 0 and ag > 0: btts += 1
+        if hg > ag: hw += (1 if ih else 0); aw += (1 if ia else 0)
+        elif ag > hg: aw += (1 if ih else 0); hw += (1 if ia else 0)
+        else: draws += 1
+        recent.append({"home": m["home_team"], "away": m["away_team"],
+                       "score": f"{hg}-{ag}", "date": m["date"][5:]})
+
+    if not goals:
+        return _mock_h2h()
+    n = len(goals)
+    return {
+        "total_matches": n, "home_wins": hw, "draws": draws, "away_wins": aw,
+        "avg_goals_h2h": round(sum(goals)/n, 2),
+        "btts_pct": round(btts/n*100, 1), "over25_pct": round(over25/n*100, 1),
+        "recent": recent[:5], "source": "Flashscore",
+    }
+
+
+# ── Compatibility exports (imported by arg_matches.py and other routes) ────
+TOURNAMENT_IDS = {
+    "PrvaLiga":        218,
+    "2SNL":            219,
+    "PrimeraDivision": 155,
+    "PrimeraNacional": 703,
+}
+
+ARG_TEAM_IDS = {
+    "River Plate": 1,  "Boca Juniors": 2,  "Racing Club": 3,
+    "Independiente": 4, "San Lorenzo": 5,  "Huracán": 6,
+    "Vélez Sársfield": 7, "Lanús": 8,     "Banfield": 9,
+    "Estudiantes": 10, "Gimnasia LP": 11,  "Colón": 12,
+    "Unión": 13,       "Talleres": 14,     "Belgrano": 15,
+    "Instituto": 16,   "Godoy Cruz": 17,   "Defensa y Justicia": 18,
+    "Platense": 19,    "Tigre": 20,        "Rosario Central": 21,
+    "Newell's Old Boys": 22, "Atlético Tucumán": 23, "Central Córdoba": 24,
+    "Sarmiento": 25,   "Argentinos Juniors": 26, "San Martín SJ": 27,
+    "Ferro": 28,       "All Boys": 29,     "San Telmo": 30,
+}
