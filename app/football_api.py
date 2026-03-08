@@ -22,17 +22,45 @@ SF_HEADERS = {
 
 # Tournament IDs en Sofascore
 TOURNAMENT_IDS = {
+    # Slovenia
     "PrvaLiga":        212,
     "2SNL":            532,
+    # Argentina
     "PrimeraDivision": 155,
     "PrimeraNacional": 703,
+    # Europe
+    "LaLiga":          8,
+    "PremierLeague":   17,
+    "SerieA":          23,
+    "Bundesliga":      35,
+    "Ligue1":          34,
+    "ChampionsLeague": 7,
+    # Balkans
+    "CroatiaHNL":      44,
+    "SerbiaSuper":     64,
+    # South America extra
+    "UruguayPrimera":  278,
 }
 
 LEAGUES = {
+    # Slovenia
     "PrvaLiga":        {"tid": 212, "country": "SVN", "home_rate": 0.44},
     "2SNL":            {"tid": 532, "country": "SVN", "home_rate": 0.41},
+    # Argentina
     "PrimeraDivision": {"tid": 155, "country": "ARG", "home_rate": 0.46},
     "PrimeraNacional": {"tid": 703, "country": "ARG", "home_rate": 0.43},
+    # Europe — same Sofascore API, just different tournament IDs
+    "LaLiga":          {"tid": 8,   "country": "ESP", "home_rate": 0.46},
+    "PremierLeague":   {"tid": 17,  "country": "ENG", "home_rate": 0.46},
+    "SerieA":          {"tid": 23,  "country": "ITA", "home_rate": 0.44},
+    "Bundesliga":      {"tid": 35,  "country": "GER", "home_rate": 0.45},
+    "Ligue1":          {"tid": 34,  "country": "FRA", "home_rate": 0.44},
+    "ChampionsLeague": {"tid": 7,   "country": "EUR", "home_rate": 0.42},
+    # Balkans
+    "CroatiaHNL":      {"tid": 44,  "country": "CRO", "home_rate": 0.46},
+    "SerbiaSuper":     {"tid": 64,  "country": "SRB", "home_rate": 0.45},
+    # South America extra
+    "UruguayPrimera":  {"tid": 278, "country": "URU", "home_rate": 0.47},
 }
 
 # ── Team ID maps ───────────────────────────────────────────────────────────

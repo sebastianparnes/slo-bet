@@ -500,16 +500,24 @@ select option{background:var(--card)}
    Cada liga tiene: id, label, emoji, apiEndpoint, color-class
    ═══════════════════════════════════════════════════════ */
 const ALL_LEAGUES = [
+  // Slovenia
   {id:'PrvaLiga',       label:'PrvaLiga',        flag:'🇸🇮', cls:'p1', api:'/api/matches/analyzed-all'},
   {id:'2SNL',           label:'2.SNL',            flag:'🇸🇮', cls:'p2', api:'/api/matches/analyzed-all'},
+  // Argentina
   {id:'PrimeraDivision',label:'Primera Div.',     flag:'🇦🇷', cls:'pa', api:'/api/arg/matches/analyzed-all'},
   {id:'PrimeraNacional',label:'Primera Nac.',     flag:'🇦🇷', cls:'pa', api:'/api/arg/matches/analyzed-all'},
-  {id:'LaLiga',         label:'La Liga',          flag:'🇪🇸', cls:'pb', api:null},
-  {id:'PremierLeague',  label:'Premier League',   flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', cls:'pb', api:null},
-  {id:'SerieA',         label:'Serie A',          flag:'🇮🇹', cls:'pb', api:null},
-  {id:'Bundesliga',     label:'Bundesliga',       flag:'🇩🇪', cls:'pb', api:null},
-  {id:'Ligue1',         label:'Ligue 1',          flag:'🇫🇷', cls:'pb', api:null},
-  {id:'ChampionsLeague',label:'Champions League', flag:'🏆', cls:'pc', api:null},
+  // Europe
+  {id:'ChampionsLeague',label:'Champions',        flag:'🏆',  cls:'pc', api:'/api/matches/analyzed-all'},
+  {id:'PremierLeague',  label:'Premier League',   flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', cls:'pb', api:'/api/matches/analyzed-all'},
+  {id:'LaLiga',         label:'La Liga',          flag:'🇪🇸', cls:'pb', api:'/api/matches/analyzed-all'},
+  {id:'SerieA',         label:'Serie A',          flag:'🇮🇹', cls:'pb', api:'/api/matches/analyzed-all'},
+  {id:'Bundesliga',     label:'Bundesliga',       flag:'🇩🇪', cls:'pb', api:'/api/matches/analyzed-all'},
+  {id:'Ligue1',         label:'Ligue 1',          flag:'🇫🇷', cls:'pb', api:'/api/matches/analyzed-all'},
+  // Balkans
+  {id:'CroatiaHNL',     label:'Croatia HNL',      flag:'🇭🇷', cls:'pb', api:'/api/matches/analyzed-all'},
+  {id:'SerbiaSuper',    label:'Serbia Super',     flag:'🇷🇸', cls:'pb', api:'/api/matches/analyzed-all'},
+  // South America extra
+  {id:'UruguayPrimera', label:'Uruguay',          flag:'🇺🇾', cls:'pa', api:'/api/matches/analyzed-all'},
 ];
 
 /* ── State ── */
@@ -578,10 +586,7 @@ function toggleLeaguePicker() {
 function toggleLeague(lid, el) {
   const lg = ALL_LEAGUES.find(x => x.id === lid);
   if (!lg) return;
-  if (!lg.api) {
-    toast(`${lg.label} aún no está disponible — próximamente`);
-    return;
-  }
+  // All leagues now have real API support
   if (_activeLeagues.includes(lid)) {
     if (_activeLeagues.length <= 1) { toast('Necesitás al menos 1 liga activa'); return; }
     _activeLeagues = _activeLeagues.filter(x => x !== lid);
@@ -670,9 +675,18 @@ async function loadMatches() {
       endpointMap[lg.api].push(lid);
     });
 
-    const fetches = Object.keys(endpointMap).map(ep =>
-      fetch(ep + '?days=7').then(r => r.json()).catch(() => ({matches:[]}))
-    );
+    // For each endpoint, build one request per league with ?league= param
+    // This lets the backend know exactly which league to fetch
+    const fetches = [];
+    for (const [ep, lids] of Object.entries(endpointMap)) {
+      for (const lid of lids) {
+        fetches.push(
+          fetch(`${ep}?days=7&league=${encodeURIComponent(lid)}`)
+            .then(r => r.json())
+            .catch(() => ({matches:[]}))
+        );
+      }
+    }
     const results = await Promise.all(fetches);
     allMatches = results.flatMap(d => d.matches || []);
     applyF();
@@ -706,8 +720,9 @@ function renderCards(list) {
     const lg = ALL_LEAGUES.find(x => x.id === id);
     return lg?.cls || 'p1';
   };
-  el.innerHTML = list.map(m => {
-    if (m.error) return `<div class="mc" onclick="openMatchModal('${m.match_id||m.id}')"><div class="cband"><span class="cleague">${m.home_team||'?'} × ${m.away_team||'?'}</span></div><div style="padding:12px;font-family:var(--mono);font-size:11px;color:var(--dim)">Error: ${m.error}</div></div>`;
+  _curList = list;
+  el.innerHTML = list.map((m, idx) => {
+    if (m.error) return `<div class="mc" onclick="openMatchModal(${idx})"><div class="cband"><span class="cleague">${m.home_team||'?'} × ${m.away_team||'?'}</span></div><div style="padding:12px;font-family:var(--mono);font-size:11px;color:var(--dim)">Error: ${m.error}</div></div>`;
     const p = m.probabilities || {};
     const top = m.top_recommendation;
     const conf = top?.confidence || 0;
@@ -720,8 +735,7 @@ function renderCards(list) {
     const evBadge = top?.is_value
       ? `<span class="odds-inline">EV+${top.ev}</span>`
       : (top?.xbet_odd ? `<span class="odds-inline">@${top.xbet_odd}</span>` : '');
-    const mid = m.match_id || m.id || '';
-    return `<div class="mc ${m.has_value_bet?'val':''}" onclick="openMatchModal('${mid}')">
+    return `<div class="mc ${m.has_value_bet?'val':''}" onclick="openMatchModal(${idx})">
       <div class="cband">
         <span class="cleague ${lCls}">${lLabel}</span>
         <span class="cdate">${dt}</span>
@@ -742,17 +756,28 @@ function renderCards(list) {
 }
 
 /* ── Match modal — determine correct API endpoint from league ── */
-async function openMatchModal(id) {
+// _curList holds the currently rendered list (same order as cards)
+let _curList = [];
+
+async function openMatchModal(idx) {
   document.getElementById('ov-match').classList.add('open');
   document.getElementById('modal-body').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  // Find match in allMatches to know which API to use
-  const cached = allMatches.find(m => (m.match_id || m.id) === id);
-  if (cached?.recommendations) { renderModal(cached); return; }
-  // Determine endpoint based on league
-  const lg = cached ? ALL_LEAGUES.find(x => x.id === cached.league) : null;
-  const base = lg?.api?.replace('/analyzed-all','') || '/api/matches';
+  const m = _curList[idx];
+  if (!m) {
+    document.getElementById('modal-body').innerHTML = '<p style="font-family:var(--mono);color:var(--red)">Partido no encontrado</p>';
+    return;
+  }
+  // If already fully analyzed, render from cache
+  if (m.recommendations) { renderModal(m); return; }
+  // Determine correct API endpoint from league
+  const lgInfo = ALL_LEAGUES.find(x => x.id === m.league);
+  const base = lgInfo?.api?.replace('/analyzed-all','') || '/api/matches';
+  const mid = m.match_id || m.id || '';
   try {
-    renderModal(await (await fetch(`${base}/${id}/analysis`)).json());
+    const data = await (await fetch(`${base}/${mid}/analysis`)).json();
+    // Cache the result back
+    _curList[idx] = {...m, ...data};
+    renderModal(_curList[idx]);
   } catch(e) {
     document.getElementById('modal-body').innerHTML = `<p style="font-family:var(--mono);color:var(--red)">${e.message}</p>`;
   }
@@ -932,9 +957,18 @@ async function submitBet() {
 /* ── History ── */
 async function loadStats() {
   try {
-    const url = '/api/history/stats' + (_username?'?username='+encodeURIComponent(_username):'');
-    const d = await (await fetch(url)).json();
-    const o = d.overall, pnl = o.profit_loss||0, roi = o.roi||0;
+    const qs = _username ? '?username='+encodeURIComponent(_username) : '';
+    const [r1, r2] = await Promise.all([
+      fetch('/api/history/stats'+qs).then(r=>r.json()).catch(()=>({overall:{wins:0,losses:0,pending:0,total_staked:0,profit_loss:0,roi:0,win_rate:0}})),
+      fetch('/api/arg/history/stats'+qs).then(r=>r.json()).catch(()=>({overall:{wins:0,losses:0,pending:0,total_staked:0,profit_loss:0,roi:0,win_rate:0}})),
+    ]);
+    const o1=r1.overall||{}, o2=r2.overall||{};
+    const wins=(+o1.wins||0)+(+o2.wins||0), losses=(+o1.losses||0)+(+o2.losses||0);
+    const staked=(+o1.total_staked||0)+(+o2.total_staked||0), pl=(+o1.profit_loss||0)+(+o2.profit_loss||0);
+    const o={wins,losses,pending:(+o1.pending||0)+(+o2.pending||0),total_staked:staked,profit_loss:pl,
+      win_rate:(wins+losses)>0?Math.round(wins/(wins+losses)*1000)/10:0,
+      roi:staked>0?Math.round(pl/staked*10000)/100:0};
+    const pnl = o.profit_loss||0, roi = o.roi||0;
     document.getElementById('k-staked').textContent = `$${(o.total_staked||0).toFixed(0)}`;
     const pe = document.getElementById('k-pnl'); pe.textContent = `${pnl>=0?'+':''}$${pnl.toFixed(0)}`; pe.className='kv '+(pnl>=0?'pos':'neg');
     const re = document.getElementById('k-roi'); re.textContent = `${roi>=0?'+':''}${roi.toFixed(1)}%`; re.className='kv '+(roi>=0?'pos':'neg');
@@ -949,13 +983,25 @@ async function loadStats() {
 async function loadHistory() {
   const res = document.getElementById('fil-res').value;
   const lg  = document.getElementById('fil-lg').value;
-  let url = '/api/history/?limit=200';
-  if (res) url += `&result=${res}`;
-  if (lg)  url += `&league=${lg}`;
-  if (_username) url += `&username=${encodeURIComponent(_username)}`;
+  const params = new URLSearchParams({limit:200});
+  if (res) params.set('result', res);
+  if (lg)  params.set('league', lg);
+  if (_username) params.set('username', _username);
+  const qs = '?' + params.toString();
   try {
-    const d = await (await fetch(url)).json();
-    renderHistory(d.bets||[]);
+    // Fetch from both endpoints and merge (Turso is shared, but routes may differ)
+    const [d1, d2] = await Promise.all([
+      fetch('/api/history/' + qs).then(r=>r.json()).catch(()=>({bets:[]})),
+      fetch('/api/arg/history/' + qs).then(r=>r.json()).catch(()=>({bets:[]})),
+    ]);
+    // Merge and deduplicate by id
+    const seen = new Set();
+    const merged = [...(d1.bets||[]), ...(d2.bets||[])].filter(b => {
+      if (seen.has(b.id)) return false;
+      seen.add(b.id); return true;
+    });
+    merged.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+    renderHistory(merged);
   } catch(e) {
     document.getElementById('htbody').innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);font-family:var(--mono);font-size:11px;padding:16px">Error: ${e.message}</td></tr>`;
   }

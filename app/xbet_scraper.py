@@ -16,8 +16,24 @@ _cache_expiry: dict = {}
 CACHE_TTL = 300  # 5 minutos — cuotas cambian rápido
 
 LEAGUE_IDS = {
-    "PrvaLiga": 118593,
-    "2SNL":     270435,
+    # Slovenia
+    "PrvaLiga":        118593,
+    "2SNL":            270435,
+    # Argentina
+    "PrimeraDivision": 119599,
+    "PrimeraNacional": 2922491,
+    # Europe
+    "ChampionsLeague": 118587,
+    "PremierLeague":   88637,
+    "Bundesliga":      96463,
+    "LaLiga":          127733,
+    "SerieA":          110163,
+    "Ligue1":          12821,
+    # Balkans / extra
+    "CroatiaHNL":      27735,
+    "SerbiaSuper":     30035,
+    # South America extra
+    "UruguayPrimera":  52183,
 }
 
 def _get_proxy() -> str:
@@ -150,7 +166,10 @@ async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[
     if cached is not None:
         return cached
 
-    league_id = LEAGUE_IDS.get(league, LEAGUE_IDS["PrvaLiga"])
+    league_id = LEAGUE_IDS.get(league)
+    if not league_id:
+        print(f"[1xbet] No league ID for '{league}' — skipping odds")
+        return None
     games = await _fetch_league_games(league_id)
 
     if not games:
