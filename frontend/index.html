@@ -216,29 +216,7 @@ body{
 .scbar{height:3px;background:var(--rule);margin-top:5px}
 .scfill{height:100%;background:var(--green);transition:width .6s ease}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.fbox{background:var(--surf);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border-color .15s}
-.fbox:hover{border-color:var(--green)}
-.fbox.open{border-color:var(--green)}
-.fmatches{display:none;margin-top:10px;border-top:1px solid var(--rule);padding-top:8px}
-.fmatch{font-family:var(--mono);font-size:10px;display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08)}
-.fmatch:last-child{border:none}
-.fmr{width:18px;height:18px;border-radius:2px;display:grid;place-items:center;font-size:9px;font-weight:700;flex-shrink:0;color:#fff}
-.fmr.g{background:var(--green);color:var(--ink)}
-.fmr.e{background:#b5860d}
-.fmr.p{background:var(--red)}
-.fmteams{flex:1;color:var(--ink);font-size:10px}
-.fmteams strong{font-weight:600}
-.fmscore{font-weight:700;color:var(--ink);flex-shrink:0}
-.fmdate{color:var(--dim);font-size:9px;flex-shrink:0}
-.sc{background:var(--surf);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;transition:border-color .15s;position:relative}
-.sc:hover{border-color:var(--green)}
-.sc.open{border-color:var(--green)}
-.sc-panel{background:var(--ink);color:var(--paper);border:1px solid var(--green);padding:12px;margin-top:8px;font-family:var(--mono);font-size:11px;line-height:1.7;display:none}
-.sc-panel.open{display:block}
-.sc-panel-line{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
-.sc-panel-line:last-child{border:none}
-.sc-panel-k{color:#888}
-.sc-panel-v{color:var(--lime);text-align:right;font-weight:500}
+.fbox{background:var(--surf);border:1px solid var(--rule);padding:10px 12px}
 .fteam{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
 .fdots{font-size:14px;letter-spacing:4px}
 .fstat{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px}
@@ -381,15 +359,39 @@ select option{background:var(--card)}
   .prow{grid-template-columns:repeat(5,1fr)}
   .prow .pb{display:block}
 }
+
+/* ── Login overlay ── */
+.login-ov{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--card);border:2px solid var(--lime);padding:32px 40px;min-width:320px;text-align:center}
+.login-box h2{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--lime);margin-bottom:20px}
+.login-input{width:100%;background:var(--surf);border:1.5px solid var(--rule);color:var(--ink);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;margin-bottom:14px}
+.login-input:focus{border-color:var(--lime)}
+.login-btn{width:100%;background:var(--lime);color:var(--ink);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:2px;padding:10px;border:none;cursor:pointer}
+.login-btn:hover{opacity:.9}
+.user-chip{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:6px;cursor:pointer}
+.user-chip:hover{color:var(--lime)}
+/* ── Add league button ── */
+.btn-add-lg{font-family:var(--mono);font-size:10px;background:transparent;border:1px dashed var(--dim);color:var(--dim);padding:4px 10px;cursor:pointer;transition:all .15s}
+.btn-add-lg:hover{border-color:var(--lime);color:var(--lime)}
+.league-picker{background:var(--surf);border:1px solid var(--rule);padding:8px;display:none;flex-wrap:wrap;gap:6px;margin-top:4px}
+.league-picker.open{display:flex}
+.lp-opt{font-family:var(--mono);font-size:10px;background:var(--card);border:1px solid var(--rule);color:var(--ink);padding:4px 10px;cursor:pointer}
+.lp-opt:hover{border-color:var(--lime);color:var(--lime)}
+.lp-opt.active{border-color:var(--lime);color:var(--lime);background:rgba(184,247,60,0.08)}
 </style>
 </head>
 <body>
 
-<div style="background:#111;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 16px;border-bottom:1px solid #222">
-  <a href="/" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:rgba(184,247,60,0.08);border:1px solid var(--lime);color:var(--lime);padding:4px 16px;text-decoration:none">🇸🇮 SLO·BET</a>
-  <div style="width:1px;height:16px;background:#333;margin:0 6px"></div>
-  <a href="/arg" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:transparent;border:1px solid #333;color:#555;padding:4px 16px;text-decoration:none">🇦🇷 ARG·BET</a>
+<!-- Login overlay -->
+<div class="login-ov" id="login-ov">
+  <div class="login-box">
+    <h2>⬡ SLO·BET / ARG·BET</h2>
+    <p style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:20px">Ingresá tu nombre para guardar tu historial</p>
+    <input class="login-input" id="login-input" placeholder="tu nombre..." maxlength="30" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">ENTRAR →</button>
+  </div>
 </div>
+
 <header class="hdr">
   <div class="hdr-in">
     <a class="logo" href="/">
@@ -400,9 +402,20 @@ select option{background:var(--card)}
       <button class="nb on" data-page="matches">⚽ Partidos</button>
       <button class="nb" data-page="history">◎ Historial</button>
     </nav>
-    <div class="ticker"><div class="tdot"></div>1xbet LIVE</div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="ticker"><div class="tdot"></div>1xbet LIVE</div>
+      <div class="user-chip" id="user-chip" onclick="doLogout()">
+        <span id="user-chip-name">—</span>
+        <span style="opacity:.5">✕</span>
+      </div>
+    </div>
   </div>
 </header>
+<div style="background:#111;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 16px;border-bottom:1px solid #222">
+  <a href="/" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:rgba(184,247,60,0.08);border:1px solid var(--lime);color:var(--lime);padding:4px 16px;text-decoration:none">🇸🇮 SLO·BET</a>
+  <div style="width:1px;height:16px;background:#333;margin:0 6px"></div>
+  <a href="/arg" style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;background:transparent;border:1px solid #333;color:#555;padding:4px 16px;text-decoration:none">🇦🇷 ARG·BET</a>
+</div>
 
 <!-- Mobile bottom nav -->
 <nav class="mob-nav">
@@ -439,7 +452,17 @@ select option{background:var(--card)}
       <button class="pill on" data-league="all">Todas</button>
       <button class="pill" data-league="PrvaLiga">PrvaLiga</button>
       <button class="pill" data-league="2SNL">2.SNL</button>
+      <button class="btn-add-lg" onclick="toggleLeaguePicker()">+ liga</button>
       <button class="pill" data-conf="1">⚡ EV+</button>
+    </div>
+    <div class="league-picker" id="league-picker">
+      <div class="lp-opt" data-lid="PrimeraDivision" onclick="addLeague('PrimeraDivision',this)">🇦🇷 Primera División</div>
+      <div class="lp-opt" data-lid="PrimeraNacional" onclick="addLeague('PrimeraNacional',this)">🇦🇷 Primera Nacional</div>
+      <div class="lp-opt" data-lid="LaLiga" onclick="addLeague('LaLiga',this)">🇪🇸 La Liga</div>
+      <div class="lp-opt" data-lid="PremierLeague" onclick="addLeague('PremierLeague',this)">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</div>
+      <div class="lp-opt" data-lid="SerieA" onclick="addLeague('SerieA',this)">🇮🇹 Serie A</div>
+      <div class="lp-opt" data-lid="Bundesliga" onclick="addLeague('Bundesliga',this)">🇩🇪 Bundesliga</div>
+      <div class="lp-opt" data-lid="Ligue1" onclick="addLeague('Ligue1',this)">🇫🇷 Ligue 1</div>
     </div>
     <div class="search-wrap">
       <input class="search-input" id="search-input" placeholder="Buscar equipo… ej: Maribor, Olimpija, Koper" oninput="applyF()">
@@ -687,19 +710,19 @@ function renderModal(d) {
   const p=d.probabilities||{}, bd=d.score_breakdown||{}, recs=d.recommendations||[], odds=d.xbet_odds;
   const pc=v=>v>=50?'var(--green)':v>=35?'#b5860d':'var(--dim)';
 
+  // Colores forma: G=verde, E=amarillo, P=rojo
   const fcol=c=>(c==='G'||c==='W')?'var(--green)':(c==='E'||c==='D')?'#b5860d':'var(--red)';
   const flbl=c=>(c==='G'||c==='W')?'G':(c==='E'||c==='D')?'E':'P';
-  const fdDots=s=>(s||'?????').split('').map(c=>`<span style="color:${fcol(c)};font-weight:700">${flbl(c)}</span>`).join('<span style="opacity:.2"> </span>');
-  const fdList=rm=>{
-    if(!rm||!rm.length) return '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding:4px 0">Sin datos de partidos disponibles aún</div>';
-    return rm.map(m=>{
-      const r=flbl(m.result||'P'), cls=r==='G'?'g':r==='E'?'e':'p';
-      const loc=m.was_home?`<strong>${m.home}</strong>`:m.home;
-      const vis=m.was_home?m.away:`<strong>${m.away}</strong>`;
-      return `<div class="fmatch"><div class="fmr ${cls}">${r}</div><div class="fmteams">${loc} vs ${vis}</div><div class="fmscore">${m.score}</div><div class="fmdate">${m.date}</div></div>`;
-    }).join('');
-  };
-  _currentBd = bd;
+
+  // Forma clickeable con tooltip del partido (hover muestra el resultado)
+  function fdClickable(formStr, recentMatches) {
+    return (formStr||'?????').split('').map((c,i)=>{
+      const m=recentMatches&&recentMatches[i];
+      const tip=m?`title="${m.home} ${m.score} ${m.away} (${m.date})"`:'' ;
+      return `<span ${tip} style="color:${fcol(c)};font-weight:600;cursor:${m?'help':'default'};${m?'border-bottom:1px dotted '+fcol(c)+';':''}">${flbl(c)}</span>`;
+    }).join('<span style="opacity:.2"> </span>');
+  }
+
   const hfRecent = bd.form?.home_recent_matches || [];
   const afRecent = bd.form?.away_recent_matches || [];
 
@@ -737,30 +760,18 @@ function renderModal(d) {
       <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${pc(p.btts||0)}">${p.btts||0}%</div></div>
     </div>
     <div class="sec">Cuotas 1xbet</div>${oddsHTML}
-    <div class="sec">Score ${bd.overall||0}/100 <span style='font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal'>— click para ver detalle</span></div>
-    <div id="sc-grid" class="sgrid"></div>
-    <div id="sc-detail-panel" class="sc-panel"></div>
-    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— click para ver los partidos</span></div>
+    <div class="sec">Score ${bd.overall||0}/100</div>
+    <div class="sgrid">${si.map(s=>`<div class="sc"><div class="scl">${s.l}</div><div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div><div class="scbar"><div class="scfill" style="width:${((s.v||0)/s.mx*100).toFixed(0)}%"></div></div></div>`).join('')}</div>
+    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover para ver el partido</span></div>
     <div class="frow">
-      <div class="fbox" id="fb-h" onclick="toggleFbox('h')">
-        <div class="fteam">${d.home_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
-        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.home_form)}</div>
-        <div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div>
-        <div class="fmatches" id="fm-h">${fdList(hfRecent)}</div>
-      </div>
-      <div class="fbox" id="fb-a" onclick="toggleFbox('a')">
-        <div class="fteam">${d.away_team} <span style="float:right;font-size:9px;color:var(--dim)">▾</span></div>
-        <div class="fdots" style="margin:6px 0">${fdDots(bd.form?.away_form)}</div>
-        <div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div>
-        <div class="fmatches" id="fm-a">${fdList(afRecent)}</div>
-      </div>
+      <div class="fbox"><div class="fteam">${d.home_team}</div><div class="fdots">${fdClickable(bd.form?.home_form,hfRecent)}</div><div class="fstat">${bd.form?.home_avg_scored||0} anotados · ${bd.form?.home_avg_conceded||0} enc/p</div></div>
+      <div class="fbox"><div class="fteam">${d.away_team}</div><div class="fdots">${fdClickable(bd.form?.away_form,afRecent)}</div><div class="fstat">${bd.form?.away_avg_scored||0} anotados · ${bd.form?.away_avg_conceded||0} enc/p</div></div>
     </div>
     ${h2hHTML}
     <div class="sec">Recomendaciones</div>
     <div class="rlist">${recs.map((r,i)=>`<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}"><div class="rihead"><div><div class="ritype">${r.bet_type.replace(/_/g,' ')}</div><div class="riname">${r.label}</div></div><div class="rbadges">${r.is_value?`<span class="badge b-ev">EV+${r.ev}</span>`:''}${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}<span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span><span class="badge b-conf">${Math.round(r.confidence)}%</span></div></div><div>${(r.reasoning||[]).map(rs=>`<div class="rreason">${rs}</div>`).join('')}</div>${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}</div>`).join('')}</div>
     ${filteredWarnings.length?`<div style="margin-top:12px">${filteredWarnings.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
-  renderScoreGrid(bd);
 }
 /* ── Bet modal ── */
 function openBetModal(pre={}) {
@@ -791,7 +802,7 @@ async function submitBet(){
   const away=document.getElementById('f-away').value.trim();
   const stake=parseFloat(document.getElementById('f-stake').value);
   if(!home||!away||!stake){alert('Completá: equipos y monto.');return}
-  const body={home_team:home,away_team:away,league:document.getElementById('f-lg').value,match_date:document.getElementById('f-date').value,bet_type:document.getElementById('f-type').value,bet_selection:document.getElementById('f-sel').value,odds:parseFloat(document.getElementById('f-odds').value)||null,stake,confidence_score:_pre._conf||null,recommendation:_pre._label||null,notes:document.getElementById('f-notes').value||null};
+  const body={username:_username||'default',home_team:home,away_team:away,league:document.getElementById('f-lg').value,match_date:document.getElementById('f-date').value,bet_type:document.getElementById('f-type').value,bet_selection:document.getElementById('f-sel').value,odds:parseFloat(document.getElementById('f-odds').value)||null,stake,confidence_score:_pre._conf||null,recommendation:_pre._label||null,notes:document.getElementById('f-notes').value||null};
   try{
     const r=await fetch('/api/history/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
@@ -806,7 +817,7 @@ async function submitBet(){
 /* ── History ── */
 async function loadStats(){
   try{
-    const d=await (await fetch('/api/history/stats')).json();
+    const d=await (await fetch('/api/history/stats'+(_username?'?username='+encodeURIComponent(_username):'')+'')).json();
     const o=d.overall, pnl=o.profit_loss||0, roi=o.roi||0;
     document.getElementById('k-staked').textContent=`$${(o.total_staked||0).toFixed(0)}`;
     const pe=document.getElementById('k-pnl'); pe.textContent=`${pnl>=0?'+':''}$${pnl.toFixed(0)}`; pe.className='kv '+(pnl>=0?'pos':'neg');
@@ -826,6 +837,7 @@ async function loadHistory(){
   let url='/api/history/?limit=200';
   if(res) url+=`&result=${res}`;
   if(lg)  url+=`&league=${lg}`;
+  if(_username) url+=`&username=${encodeURIComponent(_username)}`;
   try{
     const d=await (await fetch(url)).json();
     renderHistory(d.bets||[]);
@@ -965,60 +977,62 @@ loadMatches();
 // Poll for results every 15 min if page is open
 setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll()}, 15*60*1000);
 
-/* ── toggleFbox: forma reciente click ── */
-function toggleFbox(side) {
-  ['h','a'].forEach(s => {
-    const b=document.getElementById('fb-'+s), m=document.getElementById('fm-'+s);
-    if(!b||!m) return;
-    if(s===side && !b.classList.contains('open')) {
-      b.classList.add('open'); m.style.display='block';
-    } else {
-      b.classList.remove('open'); m.style.display='none';
-    }
+/* ── Login / usuario ── */
+let _username = localStorage.getItem('slobet_user') || '';
+
+function doLogin() {
+  const v = document.getElementById('login-input').value.trim();
+  if (!v) return;
+  _username = v;
+  localStorage.setItem('slobet_user', v);
+  document.getElementById('login-ov').style.display = 'none';
+  document.getElementById('user-chip-name').textContent = '👤 ' + v;
+  loadMatches();
+}
+
+function doLogout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  _username = '';
+  localStorage.removeItem('slobet_user');
+  document.getElementById('login-ov').style.display = 'flex';
+  document.getElementById('user-chip-name').textContent = '—';
+}
+
+// Init on load
+(function initLogin() {
+  if (_username) {
+    document.getElementById('login-ov').style.display = 'none';
+    document.getElementById('user-chip-name').textContent = '👤 ' + _username;
+  } else {
+    const v = document.getElementById('login-input');
+    if (v) setTimeout(() => v.focus(), 100);
+  }
+})();
+
+/* ── League picker ── */
+let _extraLeagues = JSON.parse(localStorage.getItem('slobet_extra_leagues') || '[]');
+
+function toggleLeaguePicker() {
+  const p = document.getElementById('league-picker');
+  p.classList.toggle('open');
+  // Mark already-added leagues
+  _extraLeagues.forEach(lid => {
+    const el = p.querySelector(`[data-lid="${lid}"]`);
+    if (el) el.classList.add('active');
   });
 }
 
-/* ── Score grid clickeable ── */
-const _SC_EXPLAIN = {
-  form:{title:'Forma Reciente',desc:(bd)=>{const f=bd.form||{};return[['Local forma',f.home_form||'—'],['Pts ponderados local',(f.home_weighted_pts||0).toFixed?.(2)+'/3.0'||'—'],['Visitante forma',f.away_form||'—'],['Pts ponderados visit.',(f.away_weighted_pts||0).toFixed?.(2)+'/3.0'||'—'],['Fuente local',f.home_source||'Flashscore'],['Fuente visit.',f.away_source||'Flashscore'],['Cómo','Últimos 5 partidos · pesos 10/15/20/25/30% (más reciente = más peso)']]}},
-  h2h:{title:'H2H — Historial',desc:(bd)=>{const h=bd.h2h||{};if(!h.total_matches)return[['Estado','Sin enfrentamientos previos → puntaje neutral (10/20)']];return[['Partidos analizados',h.total_matches],['Local gana',h.home_wins+' ('+Math.round(h.home_wins/h.total_matches*100)+'%)'],['Empate',h.draws],['Visita gana',h.away_wins],['Promedio goles',h.avg_goals_h2h],['BTTS%',h.btts_pct+'%'],['Over 2.5%',h.over25_pct+'%']]}},
-  standings:{title:'Posición en Tabla',desc:(bd)=>{const s=bd.standings||{};return[['Posición local',s.home_rank||'—'],['Posición visitante',s.away_rank||'—'],['Puntos local',s.home_points||'—'],['Puntos visitante',s.away_points||'—'],['Diferencia rango',s.rank_diff??'—'],['Fuente',s.source||'TheSportsDB'],['Cómo','Diferencia de posiciones normalizada → mayor ventaja = más puntos']]}},
-  goals:{title:'Estadísticas de Goles',desc:(bd)=>{const g=bd.goals||{};return[['xG estimado local',g.home_xg||'—'],['xG estimado visitante',g.away_xg||'—'],['Prob. +2.5 goles',((g.over25_prob||0)*100).toFixed(1)+'%'],['Prob. BTTS',((g.btts_prob||0)*100).toFixed(1)+'%'],['Modelo','Poisson bivariado con promedios anotados/encajados']]}},
-  home_advantage:{title:'Factor Local',desc:(bd)=>{const h=bd.home_advantage||{};return[['Tasa histórica local',((h.league_home_rate||0)*100).toFixed(1)+'%'],['Liga',h.league||'—'],['Cómo','PrvaLiga 44% · 2SNL 41% de victorias locales históricas']]}},
-  consistency:{title:'Consistencia',desc:(bd)=>{const c=bd.consistency||{};return[['Consistencia local',(c.home_consistency||0)+'%'],['Consistencia visitante',(c.away_consistency||0)+'%'],['Cómo','Varianza de resultados últimos 7 partidos · baja varianza = más puntos']]}},
-};
-let _openScKey=null, _currentBd={};
-function renderScoreGrid(bd) {
-  _currentBd=bd; _openScKey=null;
-  const panel=document.getElementById('sc-detail-panel');
-  if(panel){panel.classList.remove('open');panel.innerHTML='';}
-  const grid=document.getElementById('sc-grid');
-  if(!grid) return;
-  const keys=['form','h2h','standings','goals','home_advantage','consistency'];
-  const labels=['FORMA','H2H','TABLA','GOLES','LOCAL','CONSIST.'];
-  const maxes=[25,20,20,20,10,5];
-  const vals=[bd.form?.score_out_of_25,bd.h2h?.score_out_of_20,bd.standings?.score_out_of_20,bd.goals?.score_out_of_20,bd.home_advantage?.score_out_of_10,bd.consistency?.score_out_of_5];
-  grid.innerHTML=keys.map((k,i)=>{
-    const v=vals[i]||0, pct=Math.min((v/maxes[i])*100,100).toFixed(0);
-    return `<div class="sc" onclick="toggleScoreDetail('${k}')" data-key="${k}">
-      <div style="position:absolute;top:6px;right:8px;font-size:9px;color:var(--dim);font-family:var(--mono)">+</div>
-      <div class="scl">${labels[i]}</div>
-      <div class="scv">${v.toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${maxes[i]}</span></div>
-      <div class="scbar"><div class="scfill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
-}
-function toggleScoreDetail(key) {
-  const panel=document.getElementById('sc-detail-panel');
-  const explain=_SC_EXPLAIN[key];
-  if(!explain||!panel) return;
-  document.querySelectorAll('#sc-grid .sc').forEach(el=>el.classList.toggle('open',el.dataset.key===key&&_openScKey!==key));
-  if(_openScKey===key){panel.classList.remove('open');panel.innerHTML='';_openScKey=null;return;}
-  _openScKey=key;
-  const rows=explain.desc(_currentBd);
-  panel.innerHTML=`<strong style="font-family:var(--mono);font-size:11px;color:var(--lime);letter-spacing:1px">${explain.title.toUpperCase()}</strong>
-    <div style="margin-top:8px">${rows.map(([k,v])=>`<div class="sc-panel-line"><span class="sc-panel-k">${k}</span><span class="sc-panel-v">${v}</span></div>`).join('')}</div>`;
-  panel.classList.add('open');
+function addLeague(lid, el) {
+  if (_extraLeagues.includes(lid)) {
+    _extraLeagues = _extraLeagues.filter(x => x !== lid);
+    el.classList.remove('active');
+  } else {
+    _extraLeagues.push(lid);
+    el.classList.add('active');
+  }
+  localStorage.setItem('slobet_extra_leagues', JSON.stringify(_extraLeagues));
+  document.getElementById('league-picker').classList.remove('open');
+  loadMatches();
 }
 </script>
 </body>
