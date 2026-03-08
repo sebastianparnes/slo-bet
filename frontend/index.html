@@ -432,7 +432,10 @@ select option{background:var(--card)}
 <div class="ov" id="ov-match" onclick="ovClick(event,'ov-match')">
   <div class="modal">
     <div class="mtop">
-      <span class="mtitle" id="modal-title">Análisis</span>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div class="mtitle" id="modal-title">Análisis</div>
+        <div id="modal-subtitle" style="font-family:var(--mono);font-size:10px;color:#888;letter-spacing:.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+      </div>
       <button class="mx" onclick="closeOv('ov-match')">✕</button>
     </div>
     <div class="mbody" id="modal-body"><div class="loading"><div class="spinner"></div></div></div>
@@ -681,7 +684,7 @@ async function loadMatches() {
     for (const [ep, lids] of Object.entries(endpointMap)) {
       for (const lid of lids) {
         fetches.push(
-          fetch(`${ep}?days=7&league=${encodeURIComponent(lid)}`)
+          fetch(`${ep}?days=3&league=${encodeURIComponent(lid)}`)
             .then(r => r.json())
             .catch(() => ({matches:[]}))
         );
@@ -767,19 +770,30 @@ async function openMatchModal(idx) {
     document.getElementById('modal-body').innerHTML = '<p style="font-family:var(--mono);color:var(--red)">Partido no encontrado</p>';
     return;
   }
-  // If already fully analyzed, render from cache
-  if (m.recommendations) { renderModal(m); return; }
+  // Use cache only if fully analyzed (has recommendations array)
+  if (m._fullAnalysis) { renderModal(m); return; }
   // Determine correct API endpoint from league
   const lgInfo = ALL_LEAGUES.find(x => x.id === m.league);
   const base = lgInfo?.api?.replace('/analyzed-all','') || '/api/matches';
   const mid = m.match_id || m.id || '';
+  // Pass league param so backend knows where to look
+  const leagueParam = m.league ? `&league=${encodeURIComponent(m.league)}` : '';
   try {
-    const data = await (await fetch(`${base}/${mid}/analysis`)).json();
-    // Cache the result back
+    const data = await (await fetch(`${base}/${mid}/analysis?days=14${leagueParam}`)).json();
+    if (data.error) throw new Error(data.error);
+    // Mark as fully analyzed and cache
+    data._fullAnalysis = true;
     _curList[idx] = {...m, ...data};
     renderModal(_curList[idx]);
   } catch(e) {
-    document.getElementById('modal-body').innerHTML = `<p style="font-family:var(--mono);color:var(--red)">${e.message}</p>`;
+    document.getElementById('modal-body').innerHTML = `
+      <div style="padding:20px">
+        <p style="font-family:var(--mono);color:var(--red);margin-bottom:12px">Error cargando análisis: ${e.message}</p>
+        <p style="font-family:var(--mono);font-size:11px;color:var(--dim)">
+          ${m.home_team} vs ${m.away_team} · ${m.league}<br>
+          ID: ${mid}
+        </p>
+      </div>`;
   }
 }
 
@@ -839,7 +853,11 @@ function toggleScDet(key) {
 
 /* ── Render modal ── */
 function renderModal(d) {
+  const lgInfo2 = ALL_LEAGUES.find(x => x.id === d.league);
+  const lgLabel = lgInfo2 ? lgInfo2.flag + ' ' + lgInfo2.label : (d.league||'');
+  const dtStr = d.match_date ? new Date(d.match_date).toLocaleString('es-AR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : '';
   document.getElementById('modal-title').textContent = `${d.home_team} × ${d.away_team}`;
+  document.getElementById('modal-subtitle').textContent = `${lgLabel}  ·  ${dtStr}`;
   const p = d.probabilities||{}, bd = d.score_breakdown||{}, recs = d.recommendations||[], odds = d.xbet_odds;
   const pc = v => v>=50?'var(--green)':v>=35?'#b5860d':'var(--dim)';
   const fcol = c => (c==='G'||c==='W')?'var(--green)':(c==='E'||c==='D')?'#b5860d':'var(--red)';
@@ -884,6 +902,11 @@ function renderModal(d) {
       <div class="pb"><div class="pbl">+2.5</div><div class="pbv" style="color:${pc(p.over_2_5||0)}">${p.over_2_5||0}%</div></div>
       <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${pc(p.btts||0)}">${p.btts||0}%</div></div>
     </div>
+    ${(bd.goals?.expected_home_goals||bd.goals?.expected_away_goals) ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+      <div class="pb" style="background:var(--card)"><div class="pbl">xG Local</div><div class="pbv" style="font-size:16px">${bd.goals?.expected_home_goals??'—'}</div></div>
+      <div class="pb" style="background:var(--card)"><div class="pbl">xG Visita</div><div class="pbv" style="font-size:16px">${bd.goals?.expected_away_goals??'—'}</div></div>
+    </div>` : ''}
     <div class="sec">Cuotas 1xbet</div>${oddsHTML}
     <div class="sec">Score ${bd.overall||0}/100 <span style="font-family:var(--mono);font-size:9px;font-weight:normal">— click en cada tarjeta para ver detalle</span></div>
     <div class="sgrid" id="sc-grid-dyn"></div>

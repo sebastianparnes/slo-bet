@@ -108,28 +108,20 @@ def _same_team(a: str, b: str) -> bool:
     return na == nb or (len(na) > 4 and na in nb) or (len(nb) > 4 and nb in na)
 
 def _norm_name(name: str) -> str:
-    mapping = {
+    """Only normalize known SLO/ARG team names. European teams pass through as-is."""
+    SLO_MAP = {
         "olimpija": "NK Olimpija Ljubljana", "maribor": "NK Maribor",
         "celje": "NK Celje", "koper": "FC Koper", "bravo": "NK Bravo",
         "mura": "NS Mura", "domzale": "NK Domžale", "domžale": "NK Domžale",
         "radomlje": "NK Radomlje", "primorje": "NK Primorje Ajdovščina",
         "nafta": "NK Nafta 1903", "aluminij": "NK Aluminij",
         "gorica": "ND Gorica", "rogaska": "NK Rogaška", "rogaška": "NK Rogaška",
-        "river": "River Plate", "boca": "Boca Juniors", "racing": "Racing Club",
-        "independiente": "Independiente", "sanlorenzo": "San Lorenzo",
-        "huracan": "Huracán", "velez": "Vélez Sársfield",
-        "lanus": "Lanús", "banfield": "Banfield",
-        "estudiantes": "Estudiantes", "gimnasia": "Gimnasia LP",
-        "talleres": "Talleres", "belgrano": "Belgrano",
-        "godoy": "Godoy Cruz", "defensa": "Defensa y Justicia",
-        "platense": "Platense", "tigre": "Tigre",
-        "rosario": "Rosario Central", "newells": "Newell's Old Boys",
-        "tucuman": "Atlético Tucumán", "central": "Central Córdoba",
-        "sarmiento": "Sarmiento", "argentinos": "Argentinos Juniors",
+        "triglav": "NK Triglav Kranj", "krsko": "NK Krško Posavje",
+        "grosuplje": "NK Grosuplje", "jadran": "NK Jadran Dekani",
     }
     key = re.sub(r"[^a-záéíóúüñ]", "", name.lower().strip())
-    for k, v in mapping.items():
-        if k in key or key in k:
+    for k, v in SLO_MAP.items():
+        if k in key:
             return v
     return name.strip()
 
@@ -216,8 +208,17 @@ async def fetch_upcoming_matches(leagues=None, days_ahead: int = 14) -> list[dic
                 print(f"[Sofascore] {league_name}: {len(found)} fixtures")
                 all_matches.extend(found)
             else:
-                print(f"[Sofascore] {league_name}: no upcoming fixtures, using mock")
-                all_matches.extend(_mock_matches(league_name))
+                # Only fall back to hardcoded SLO fixtures if it's a SLO league
+                cfg2 = LEAGUES.get(league_name, {})
+                if cfg2.get("country") == "SVN":
+                    print(f"[Sofascore] {league_name}: no upcoming, using SLO hardcoded")
+                    from datetime import date as _d
+                    today_s = _d.today().isoformat()
+                    hc = [m for m in _get_hardcoded_fixtures()
+                          if m["league"] == league_name and m["date"][:10] >= today_s]
+                    all_matches.extend(hc)
+                else:
+                    print(f"[Sofascore] {league_name}: no upcoming fixtures (non-SLO, no fallback)")
 
     return sorted(all_matches, key=lambda x: x["date"])
 
