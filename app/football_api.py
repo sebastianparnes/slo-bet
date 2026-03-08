@@ -465,3 +465,9 @@ def _mock_standings_2snl() -> list:
              "won":t[2]//3,"drawn":t[2]%3,"lost":24-t[2]//3-t[2]%3,
              "goals_for":35-i*2,"goals_against":12+i*2,"goal_diff":23-i*4,
              "form":"WWDWW" if i<4 else "WDLLL"} for i,t in enumerate(teams)]
+
+
+# ── Backward-compat aliases (used by arg_matches.py) ─────────────────────
+async def fetch_team_form_for_event(event_id, is_home: bool) -> dict:
+    """Legacy alias — returns mock form since event-based fetch is no longer used."""
+    return _mock_form(0)
