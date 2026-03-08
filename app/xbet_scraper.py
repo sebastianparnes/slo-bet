@@ -1,9 +1,8 @@
 """
 1xbet Odds Scraper — via Cloudflare Worker proxy
 =================================================
-Worker corre en IPs de Cloudflare que 1xbet no bloquea.
+El Worker corre en IPs de Cloudflare que 1xbet no bloquea.
 Configura: XBET_PROXY_URL=https://slo-bet-proxy.sebastianparnes26.workers.dev
-IDs son de 1xbet.com (no ar-xbet).
 """
 
 import httpx
@@ -14,24 +13,19 @@ from typing import Optional
 
 _cache: dict = {}
 _cache_expiry: dict = {}
-CACHE_TTL = 300
+CACHE_TTL = 300  # 5 minutos — cuotas cambian rápido
 
-# IDs de campeonato en 1xbet.com
 LEAGUE_IDS = {
-    # Slovenia
     "PrvaLiga":        118593,
     "2SNL":            270435,
-    # Argentina
     "PrimeraDivision": 119599,
     "PrimeraNacional": 2922491,
-    # Europe — IDs de 1xbet.com
     "ChampionsLeague": 118587,
     "PremierLeague":   88637,
     "LaLiga":          127733,
     "SerieA":          110163,
     "Bundesliga":      96463,
     "Ligue1":          12821,
-    # Extra
     "CroatiaHNL":      27735,
     "SerbiaSuper":     30035,
     "UruguayPrimera":  52183,
@@ -46,8 +40,7 @@ def _has_proxy() -> bool:
 def _cache_get(key: str):
     if key in _cache and datetime.now() < _cache_expiry.get(key, datetime.min):
         return _cache[key]
-    _cache.pop(key, None)
-    _cache_expiry.pop(key, None)
+    _cache.pop(key, None); _cache_expiry.pop(key, None)
     return None
 
 def _cache_set(key: str, value, ttl: int = CACHE_TTL):
@@ -56,12 +49,11 @@ def _cache_set(key: str, value, ttl: int = CACHE_TTL):
 
 def _norm(name: str) -> str:
     name = (name or "").lower()
-    for p in ["nk ", "fc ", "ns ", "nd ", "fk ", "sk ", "rc ", "ac ", "as ", "ss ", "us "]:
+    for p in ["nk ", "fc ", "ns ", "nd ", "fk ", "sk "]:
         name = name.replace(p, "")
     return re.sub(r"[^a-z0-9]", "", name).strip()
 
 def _sim(a: str, b: str) -> float:
-    if not a or not b: return 0.0
     if a == b: return 1.0
     if a in b or b in a: return 0.85
     def bg(s): return {s[i:i+2] for i in range(len(s)-1)}
@@ -69,22 +61,22 @@ def _sim(a: str, b: str) -> float:
     if not b1 or not b2: return 0.0
     return 2 * len(b1 & b2) / (len(b1) + len(b2))
 
+
 async def _fetch_via_proxy(path: str, params: str) -> dict | None:
     proxy = _get_proxy()
     if not proxy:
-        print("[1xbet] No proxy configured — set XBET_PROXY_URL")
         return None
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(proxy, params={"path": path, "params": params})
-            print(f"[1xbet-proxy] {path} → {resp.status_code} ({len(resp.text)}b)")
             if resp.status_code != 200:
-                print(f"[1xbet-proxy] Error: {resp.text[:300]}")
+                print(f"[1xbet-proxy] HTTP {resp.status_code}: {resp.text[:200]}")
                 return None
             return resp.json()
     except Exception as e:
-        print(f"[1xbet-proxy] Exception: {e}")
+        print(f"[1xbet-proxy] Error: {e}")
         return None
+
 
 async def _fetch_league_games(league_id: int) -> list:
     key = f"xbet_league_{league_id}"
@@ -100,19 +92,19 @@ async def _fetch_league_games(league_id: int) -> list:
         _cache_set(key, [], ttl=60)
         return []
 
-    val = data.get("Value") or {}
     games = (
-        (val.get("TopEvents") if isinstance(val, dict) else None) or
-        (val.get("Events")    if isinstance(val, dict) else None) or
-        (val if isinstance(val, list) else None) or
+        data.get("Value", {}).get("TopEvents") or
+        data.get("Value", {}).get("Events") or
+        data.get("Value") or
         []
     )
     if not isinstance(games, list):
         games = []
 
-    print(f"[1xbet] League {league_id}: {len(games)} games")
+    print(f"[1xbet] League {league_id}: {len(games)} games found")
     _cache_set(key, games)
     return games
+
 
 def _parse_odds(game: dict) -> dict:
     result = {
@@ -158,8 +150,10 @@ def _parse_odds(game: dict) -> dict:
 
     return result
 
+
 async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[dict]:
     if not _has_proxy():
+        print(f"[1xbet] No proxy configured — set XBET_PROXY_URL")
         return None
 
     key = f"odds_{_norm(home_team)}_{_norm(away_team)}"
@@ -169,10 +163,10 @@ async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[
 
     league_id = LEAGUE_IDS.get(league)
     if not league_id:
-        print(f"[1xbet] No ID configured for league '{league}'")
+        print(f"[1xbet] No ID for league '{league}'")
         return None
-
     games = await _fetch_league_games(league_id)
+
     if not games:
         _cache_set(key, None, ttl=120)
         return None
@@ -188,8 +182,8 @@ async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[
             best_score = score
             best = g
 
-    if not best or best_score < 0.40:
-        print(f"[1xbet] No match for '{home_team} vs {away_team}' in {league} (best={best_score:.2f})")
+    if not best or best_score < 0.50:
+        print(f"[1xbet] No match for '{home_team} vs {away_team}' (best={best_score:.2f})")
         _cache_set(key, None, ttl=300)
         return None
 
@@ -198,8 +192,8 @@ async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[
     odds["xbet_home_name"]   = best.get("O1") or best.get("HT")
     odds["xbet_away_name"]   = best.get("O2") or best.get("AT")
     _cache_set(key, odds)
-    print(f"[1xbet] ✓ Found odds for {home_team} vs {away_team} (score={best_score:.2f}): 1={odds['home']} X={odds['draw']} 2={odds['away']}")
     return odds
+
 
 def calc_ev(model_prob_pct: float, xbet_odd: float) -> Optional[float]:
     if not model_prob_pct or not xbet_odd or xbet_odd <= 1:
@@ -210,3 +204,4 @@ def implied_prob(odd: float) -> Optional[float]:
     if not odd or odd <= 1:
         return None
     return round(100 / odd, 2)
+

@@ -1,7 +1,9 @@
 """
-Football data — Sofascore (no key) + mock fallback
-====================================================
-Sofascore tiene datos reales para todas las ligas sin API key.
+Football data — Flashscore (fixtures/results) + TheSportsDB (standings)
+========================================================================
+Flashscore: no key, fixtures y resultados reales para todas las ligas.
+TheSportsDB: standings gratuitos para ligas conocidas.
+ar-xbet: cuotas via Worker proxy.
 """
 
 import httpx
@@ -9,33 +11,60 @@ import re
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-SF_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, */*",
-    "Referer": "https://www.sofascore.com/",
-    "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+FS_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.flashscore.com/",
+    "x-fsign": "SW9D1eZo",
 }
 
-# Sofascore tournament IDs
-TOURNAMENT_IDS = {
-    "PrvaLiga":        {"id": 212,  "season": 63839},
-    "2SNL":            {"id": 532,  "season": 63962},
-    "PrimeraDivision": {"id": 155,  "season": 62562},
-    "PrimeraNacional": {"id": 703,  "season": 62701},
-    "ChampionsLeague": {"id": 7,    "season": 61644},
-    "PremierLeague":   {"id": 17,   "season": 61627},
-    "LaLiga":          {"id": 8,    "season": 61643},
-    "SerieA":          {"id": 23,   "season": 61736},
-    "Bundesliga":      {"id": 35,   "season": 61737},
-    "Ligue1":          {"id": 34,   "season": 61738},
-    "CroatiaHNL":      {"id": 44,   "season": 61827},
-    "SerbiaSuper":     {"id": 64,   "season": 61885},
-    "UruguayPrimera":  {"id": 278,  "season": 62800},
+# Flashscore country/league slugs
+LEAGUES = {
+    "PrvaLiga":        {"fs_country": "slovenia",   "fs_league": "prva-liga"},
+    "2SNL":            {"fs_country": "slovenia",   "fs_league": "2-snl"},
+    "PrimeraDivision": {"fs_country": "argentina",  "fs_league": "liga-profesional"},
+    "PrimeraNacional": {"fs_country": "argentina",  "fs_league": "primera-nacional"},
+    "ChampionsLeague": {"fs_country": "europe",     "fs_league": "champions-league"},
+    "PremierLeague":   {"fs_country": "england",    "fs_league": "premier-league"},
+    "LaLiga":          {"fs_country": "spain",      "fs_league": "laliga"},
+    "SerieA":          {"fs_country": "italy",      "fs_league": "serie-a"},
+    "Bundesliga":      {"fs_country": "germany",    "fs_league": "bundesliga"},
+    "Ligue1":          {"fs_country": "france",     "fs_league": "ligue-1"},
+    "CroatiaHNL":      {"fs_country": "croatia",    "fs_league": "hnl"},
+    "SerbiaSuper":     {"fs_country": "serbia",     "fs_league": "super-liga"},
+    "UruguayPrimera":  {"fs_country": "uruguay",    "fs_league": "primera-division"},
 }
 
-LEAGUES = {k: v["id"] for k, v in TOURNAMENT_IDS.items()}
+# TheSportsDB league IDs for standings
+TSDB_IDS = {
+    "PrvaLiga":        "4966",
+    "PremierLeague":   "4328",
+    "LaLiga":          "4335",
+    "SerieA":          "4332",
+    "Bundesliga":      "4331",
+    "Ligue1":          "4334",
+    "ChampionsLeague": "4480",
+}
 
-# SLO team IDs (for mock/form fallback)
+TOURNAMENT_IDS = {k: i for i, k in enumerate(LEAGUES.keys(), 212)}
+
+# ar-xbet league IDs (used by xbet_scraper)
+XBET_LEAGUE_IDS = {
+    "PrvaLiga":        118593,
+    "2SNL":            270435,
+    "PrimeraDivision": 119599,
+    "PrimeraNacional": 2922491,
+    "ChampionsLeague": 118587,
+    "PremierLeague":   88637,
+    "LaLiga":          127733,
+    "SerieA":          110163,
+    "Bundesliga":      96463,
+    "Ligue1":          12821,
+    "CroatiaHNL":      27735,
+    "SerbiaSuper":     30035,
+    "UruguayPrimera":  52183,
+}
+
 TEAM_IDS = {
     "NK Olimpija Ljubljana": 1598, "NK Maribor": 1601, "NK Celje": 1594,
     "FC Koper": 2279, "NK Koper": 2279, "NK Bravo": 10203, "NS Mura": 1600,
@@ -53,11 +82,14 @@ def _team_id(name: str) -> int:
     return abs(hash(name)) % 90000 + 10000
 
 def _same_team(a: str, b: str) -> bool:
-    def n(s): return re.sub(r"[^a-z]","",s.lower())
+    def n(s): return re.sub(r"[^a-z]", "", s.lower())
     na, nb = n(a), n(b)
     return na == nb or (len(na) > 4 and na in nb) or (len(nb) > 4 and nb in na)
 
-def _norm_name(name: str) -> str:
+def _norm_name(name: str, league: str = "") -> str:
+    # Only normalize for SLO leagues
+    if league not in ("PrvaLiga", "2SNL"):
+        return name.strip()
     mapping = {
         "olimpija": "NK Olimpija Ljubljana", "o.ljubljana": "NK Olimpija Ljubljana",
         "maribor": "NK Maribor", "celje": "NK Celje",
@@ -68,226 +100,89 @@ def _norm_name(name: str) -> str:
         "drava": "FC Drava Ptuj", "ankaran": "NK Ankaran",
         "rogaska": "NK Rogaška", "rogaška": "NK Rogaška", "gorica": "ND Gorica",
     }
-    key = re.sub(r"[^a-zčšž]","", name.lower().strip())
+    key = re.sub(r"[^a-zčšž]", "", name.lower().strip())
     for k, v in mapping.items():
         if k in key or key in k:
             return v
     return name.strip()
 
 
-# ── Sofascore API ─────────────────────────────────────────────────────────
+# ── Flashscore ────────────────────────────────────────────────────────────
 
-async def _sf_get(path: str) -> dict:
-    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as c:
-        r = await c.get(f"https://api.sofascore.com/api/v1{path}")
-        if r.status_code == 200:
-            return r.json()
-        return {}
-
-
-async def _fetch_sf_fixtures(league: str, days_ahead: int) -> list:
-    cfg = TOURNAMENT_IDS.get(league)
-    if not cfg:
-        return []
-
-    today  = date.today()
-    cutoff = today + timedelta(days=days_ahead)
-    tid    = cfg["id"]
-    season = cfg["season"]
-
+async def _fetch_flashscore(country: str, league: str, feed: str = "f_1") -> str:
+    """Feed f_1 = upcoming, f_2 = results."""
+    url = f"https://d.flashscore.com/x/feed/{feed}_{country}_{league}_"
     try:
-        # Get scheduled events for this season
-        data = await _sf_get(f"/unique-tournament/{tid}/season/{season}/events/next/0")
-        events = data.get("events", [])
-        matches = []
+        async with httpx.AsyncClient(timeout=12, headers=FS_HEADERS) as c:
+            r = await c.get(url)
+            if r.status_code == 200:
+                return r.text
+    except Exception as e:
+        print(f"[Flashscore] {country}/{league} feed={feed}: {e}")
+    return ""
 
-        for ev in events:
-            try:
-                ts = ev.get("startTimestamp", 0)
-                dt = datetime.fromtimestamp(ts)
-                if not (today <= dt.date() <= cutoff):
-                    continue
-                status = ev.get("status", {}).get("type", "")
-                if status not in ("notstarted", "scheduled", ""):
-                    continue
 
-                ht = ev.get("homeTeam", {})
-                at = ev.get("awayTeam", {})
-                home_name = ht.get("name", "")
-                away_name = at.get("name", "")
-
-                # Only normalize for SLO leagues
-                if league in ("PrvaLiga", "2SNL"):
-                    home_name = _norm_name(home_name)
-                    away_name = _norm_name(away_name)
-
-                matches.append({
-                    "id":           str(ev.get("id", "")),
-                    "date":         dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                    "status":       "NS",
-                    "league":       league,
-                    "league_id":    tid,
-                    "round":        ev.get("roundInfo", {}).get("name", ""),
-                    "home_team":    home_name,
-                    "home_team_id": ht.get("id", _team_id(home_name)),
-                    "away_team":    away_name,
-                    "away_team_id": at.get("id", _team_id(away_name)),
-                    "venue":        ev.get("venue", {}).get("name", "") if ev.get("venue") else "",
-                })
-            except:
+def _parse_fs_feed(text: str, league_name: str, today: date, cutoff: date) -> list:
+    matches = []
+    for seg in text.split("~"):
+        try:
+            parts = dict(p.split("¬") for p in seg.split("÷") if "¬" in p)
+            if not parts:
                 continue
-
-        print(f"[Sofascore] {league}: {len(matches)} fixtures")
-        return matches
-
-    except Exception as e:
-        print(f"[Sofascore] {league} error: {e}")
-        return []
-
-
-async def _fetch_sf_team_form(team_id: int, season_id: int, league: str) -> dict:
-    """Fetch last 7 results for a team from Sofascore."""
-    try:
-        data = await _sf_get(f"/team/{team_id}/events/previous/0")
-        events = data.get("events", [])
-        results, scored, conceded, recent = [], [], [], []
-
-        for ev in events[:10]:
-            status = ev.get("status", {}).get("type", "")
-            if status != "finished":
+            match_id = parts.get("AA", "")
+            home     = parts.get("CX", parts.get("AE", ""))
+            away     = parts.get("AF", parts.get("CY", ""))
+            ts       = parts.get("AD", parts.get("U_", ""))
+            if not home or not away or not ts:
                 continue
-            ht   = ev.get("homeTeam", {})
-            at   = ev.get("awayTeam", {})
-            hsc  = ev.get("homeScore", {})
-            asc  = ev.get("awayScore", {})
-            hg   = hsc.get("current", 0) or hsc.get("display", 0)
-            ag   = asc.get("current", 0) or asc.get("display", 0)
-
-            is_home = ht.get("id") == team_id
-            tg = hg if is_home else ag
-            og = ag if is_home else hg
-            scored.append(tg); conceded.append(og)
-
-            res = "W" if tg > og else ("D" if tg == og else "L")
-            results.append(res)
-
-            ts = ev.get("startTimestamp", 0)
-            dt_str = datetime.fromtimestamp(ts).strftime("%d/%m") if ts else ""
-            opp = at.get("name", "?") if is_home else ht.get("name", "?")
-            recent.append({
-                "home":  ht.get("name","?"), "away": at.get("name","?"),
-                "score": f"{hg}-{ag}", "date": dt_str,
-                "result": res, "is_home": is_home, "opponent": opp,
-                "goals_for": tg, "goals_against": og,
+            dt = datetime.fromtimestamp(int(ts))
+            if not (today <= dt.date() <= cutoff):
+                continue
+            home_n = _norm_name(home, league_name)
+            away_n = _norm_name(away, league_name)
+            matches.append({
+                "id":           match_id or f"fs_{abs(hash(home+away+ts))}",
+                "date":         dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "status":       "NS",
+                "league":       league_name,
+                "league_id":    XBET_LEAGUE_IDS.get(league_name, 212),
+                "round":        parts.get("AL", ""),
+                "home_team":    home_n,
+                "home_team_id": _team_id(home_n),
+                "away_team":    away_n,
+                "away_team_id": _team_id(away_n),
+                "venue":        "",
             })
-            if len(results) >= 7:
-                break
-
-        if not results:
-            return _mock_form(team_id)
-
-        n = len(results)
-        return {
-            "form":           results,
-            "form_string":    "".join(results[:5]),
-            "avg_scored":     round(sum(scored)/n, 2),
-            "avg_conceded":   round(sum(conceded)/n, 2),
-            "clean_sheets":   sum(1 for g in conceded if g == 0),
-            "btts_count":     sum(1 for s,c in zip(scored,conceded) if s>0 and c>0),
-            "games_analyzed": n,
-            "recent_matches": recent,
-        }
-    except Exception as e:
-        print(f"[Sofascore] form team {team_id}: {e}")
-        return _mock_form(team_id)
+        except:
+            continue
+    return matches
 
 
-async def _fetch_sf_h2h(home_id: int, away_id: int) -> dict:
-    try:
-        data = await _sf_get(f"/event/head2head/{home_id}/{away_id}")
-        events = (data.get("firstTeamEvents") or []) + (data.get("secondTeamEvents") or [])
-        events = sorted(events, key=lambda e: e.get("startTimestamp",0), reverse=True)[:10]
-
-        hw = aw = draws = btts = 0
-        goals = []
-        recent = []
-
-        for ev in events:
-            ht_id = ev.get("homeTeam", {}).get("id")
-            hg = ev.get("homeScore",{}).get("current", ev.get("homeScore",{}).get("display",0)) or 0
-            ag = ev.get("awayScore",{}).get("current", ev.get("awayScore",{}).get("display",0)) or 0
-            total = hg + ag
-            goals.append(total)
-            if hg > ag:
-                if ht_id == home_id: hw += 1
-                else: aw += 1
-            elif ag > hg:
-                if ht_id == home_id: aw += 1
-                else: hw += 1
-            else:
-                draws += 1
-            if hg > 0 and ag > 0: btts += 1
-
-            ts = ev.get("startTimestamp", 0)
-            dt_str = datetime.fromtimestamp(ts).strftime("%d/%m/%y") if ts else ""
-            recent.append({
-                "home":  ev.get("homeTeam",{}).get("name","?"),
-                "away":  ev.get("awayTeam",{}).get("name","?"),
-                "score": f"{hg}-{ag}",
-                "date":  dt_str,
+def _parse_fs_results(text: str, league_name: str) -> list:
+    results = []
+    for seg in text.split("~"):
+        try:
+            parts = dict(p.split("¬") for p in seg.split("÷") if "¬" in p)
+            home = parts.get("CX", parts.get("AE", ""))
+            away = parts.get("AF", parts.get("CY", ""))
+            hg   = parts.get("AG", "")
+            ag   = parts.get("AH", "")
+            ts   = parts.get("AD", "")
+            if not home or not away or hg == "" or ag == "":
+                continue
+            dt_str = datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d") if ts else ""
+            results.append({
+                "id":         parts.get("AA", ""),
+                "date":       dt_str,
+                "home_team":  _norm_name(home, league_name),
+                "away_team":  _norm_name(away, league_name),
+                "home_goals": int(hg),
+                "away_goals": int(ag),
+                "status":     "FT",
             })
-
-        n = len(goals)
-        if n == 0:
-            return _mock_h2h()
-
-        return {
-            "total_matches": n,
-            "home_wins":     hw,
-            "draws":         draws,
-            "away_wins":     aw,
-            "avg_goals_h2h": round(sum(goals)/n, 2),
-            "btts_pct":      round(btts/n*100, 1),
-            "over25_pct":    round(sum(1 for g in goals if g > 2.5)/n*100, 1),
-            "recent":        recent,
-        }
-    except Exception as e:
-        print(f"[Sofascore] h2h {home_id}/{away_id}: {e}")
-        return _mock_h2h()
-
-
-async def _fetch_sf_standings(league: str) -> list:
-    cfg = TOURNAMENT_IDS.get(league)
-    if not cfg:
-        return []
-    try:
-        data = await _sf_get(f"/unique-tournament/{cfg['id']}/season/{cfg['season']}/standings/total")
-        rows = data.get("standings", [{}])[0].get("rows", [])
-        result = []
-        for row in rows:
-            t = row.get("team", {})
-            name = t.get("name", "")
-            if league in ("PrvaLiga", "2SNL"):
-                name = _norm_name(name)
-            result.append({
-                "rank":         row.get("position", 0),
-                "team_id":      t.get("id", _team_id(name)),
-                "team_name":    name,
-                "points":       row.get("points", 0),
-                "played":       row.get("matches", 0),
-                "won":          row.get("wins", 0),
-                "drawn":        row.get("draws", 0),
-                "lost":         row.get("losses", 0),
-                "goals_for":    row.get("scoresFor", 0),
-                "goals_against":row.get("scoresAgainst", 0),
-                "goal_diff":    row.get("scoresFor",0) - row.get("scoresAgainst",0),
-                "form":         row.get("form", ""),
-            })
-        print(f"[Sofascore] standings {league}: {len(result)} teams")
-        return result
-    except Exception as e:
-        print(f"[Sofascore] standings {league}: {e}")
-        return []
+        except:
+            continue
+    return results
 
 
 # ── Public API ────────────────────────────────────────────────────────────
@@ -295,75 +190,182 @@ async def _fetch_sf_standings(league: str) -> list:
 async def fetch_upcoming_matches(days_ahead: int = 7, leagues: list = None) -> list:
     import asyncio
     if leagues is None:
-        leagues = list(TOURNAMENT_IDS.keys())
+        leagues = list(LEAGUES.keys())
 
-    tasks = [_fetch_sf_fixtures(lg, days_ahead) for lg in leagues]
-    results = await asyncio.gather(*tasks)
+    today  = date.today()
+    cutoff = today + timedelta(days=days_ahead)
 
-    all_matches = []
-    for lg, fixtures in zip(leagues, results):
-        if fixtures:
-            all_matches.extend(fixtures)
-        elif lg in ("PrvaLiga", "2SNL"):
-            # Only use mock for SLO leagues
-            print(f"[mock] {lg}: using hardcoded fixtures")
-            all_matches.extend(_mock_matches(lg))
+    async def _fetch_one(league_name):
+        cfg = LEAGUES.get(league_name, {})
+        if not cfg:
+            return []
+        text = await _fetch_flashscore(cfg["fs_country"], cfg["fs_league"], "f_1")
+        if text:
+            fixtures = _parse_fs_feed(text, league_name, today, cutoff)
+            print(f"[Flashscore] {league_name}: {len(fixtures)} fixtures")
+            return fixtures
+        # SLO-only fallback
+        if league_name in ("PrvaLiga", "2SNL"):
+            print(f"[mock] {league_name}: using hardcoded fixtures")
+            return _mock_matches(league_name)
+        return []
 
-    return sorted(all_matches, key=lambda x: x["date"])
+    results = await asyncio.gather(*[_fetch_one(lg) for lg in leagues])
+    all_m = [m for r in results for m in r]
+    return sorted(all_m, key=lambda x: x["date"])
 
 
-async def fetch_team_form(team_id: int, league_id: int = 212, last_n: int = 7) -> dict:
-    # Find season for this league_id
-    league = next((k for k,v in TOURNAMENT_IDS.items() if v["id"] == league_id), "PrvaLiga")
-    cfg = TOURNAMENT_IDS.get(league, {})
-    season = cfg.get("season", 63839)
-    result = await _fetch_sf_team_form(team_id, season, league)
-    if not result.get("recent_matches"):
-        result["recent_matches"] = []
-    return result
+async def fetch_past_results(league_id: int = 118593, last_n: int = 30) -> list:
+    # Find league name by xbet ID
+    league_name = next((k for k, v in XBET_LEAGUE_IDS.items() if v == league_id), "PrvaLiga")
+    cfg = LEAGUES.get(league_name, LEAGUES["PrvaLiga"])
+    text = await _fetch_flashscore(cfg["fs_country"], cfg["fs_league"], "f_2")
+    if text:
+        return _parse_fs_results(text, league_name)[-last_n:]
+    return []
+
+
+async def fetch_team_form(team_id: int, league_id: int = 118593, last_n: int = 7) -> dict:
+    league_name = next((k for k, v in XBET_LEAGUE_IDS.items() if v == league_id), "PrvaLiga")
+    team_name   = ID_TO_NAME.get(team_id, "")
+    past        = await fetch_past_results(league_id, last_n=50)
+
+    results, scored, conceded, recent = [], [], [], []
+    for m in past:
+        is_home = _same_team(m["home_team"], team_name) if team_name else False
+        is_away = _same_team(m["away_team"], team_name) if team_name else False
+        if not is_home and not is_away:
+            continue
+        tg = m["home_goals"] if is_home else m["away_goals"]
+        og = m["away_goals"] if is_home else m["home_goals"]
+        scored.append(tg); conceded.append(og)
+        res = "W" if tg > og else ("D" if tg == og else "L")
+        results.append(res)
+        opp = m["away_team"] if is_home else m["home_team"]
+        recent.append({
+            "home":         m["home_team"],
+            "away":         m["away_team"],
+            "score":        f"{m['home_goals']}-{m['away_goals']}",
+            "date":         m["date"][5:10].replace("-", "/") if m.get("date") else "",
+            "result":       res,
+            "is_home":      is_home,
+            "opponent":     opp,
+            "goals_for":    tg,
+            "goals_against":og,
+        })
+        if len(results) >= last_n:
+            break
+
+    if not results:
+        return _mock_form(team_id)
+
+    n = len(results)
+    return {
+        "form":            results,
+        "form_string":     "".join(results[-5:]),
+        "avg_scored":      round(sum(scored)/n, 2),
+        "avg_conceded":    round(sum(conceded)/n, 2),
+        "clean_sheets":    sum(1 for g in conceded if g == 0),
+        "btts_count":      sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
+        "games_analyzed":  n,
+        "recent_matches":  recent,
+    }
 
 
 async def fetch_h2h(home_id: int, away_id: int) -> dict:
-    return await _fetch_sf_h2h(home_id, away_id)
+    home_name = ID_TO_NAME.get(home_id, "")
+    away_name = ID_TO_NAME.get(away_id, "")
+
+    # Try to get results from both teams' leagues
+    past = await fetch_past_results(118593, last_n=80)
+
+    hw = aw = draws = btts = 0
+    goals, recent = [], []
+    for m in past:
+        ih = (_same_team(m["home_team"], home_name) and _same_team(m["away_team"], away_name)) if home_name and away_name else False
+        ia = (_same_team(m["home_team"], away_name) and _same_team(m["away_team"], home_name)) if home_name and away_name else False
+        if not ih and not ia:
+            continue
+        hg, ag = m["home_goals"], m["away_goals"]
+        goals.append(hg + ag)
+        if hg > ag: hw += (1 if ih else 0); aw += (1 if ia else 0)
+        elif ag > hg: aw += (1 if ih else 0); hw += (1 if ia else 0)
+        else: draws += 1
+        if hg > 0 and ag > 0: btts += 1
+        recent.append({
+            "home": m["home_team"], "away": m["away_team"],
+            "score": f"{hg}-{ag}",
+            "date": m["date"][5:10].replace("-", "/") if m.get("date") else "",
+        })
+
+    if not goals:
+        return _mock_h2h()
+
+    n = len(goals)
+    return {
+        "total_matches": n,
+        "home_wins":     hw,
+        "draws":         draws,
+        "away_wins":     aw,
+        "avg_goals_h2h": round(sum(goals)/n, 2),
+        "btts_pct":      round(btts/n*100, 1),
+        "over25_pct":    round(sum(1 for g in goals if g > 2.5)/n*100, 1),
+        "recent":        recent[:5],
+    }
 
 
 async def fetch_standings(league_id: int) -> list:
-    league = next((k for k,v in TOURNAMENT_IDS.items() if v["id"] == league_id), None)
-    if not league:
+    league_name = next((k for k, v in XBET_LEAGUE_IDS.items() if v == league_id), None)
+    if not league_name:
         return _mock_standings()
-    result = await _fetch_sf_standings(league)
-    if not result:
-        if league == "2SNL": return _mock_standings_2snl()
-        return _mock_standings()
-    return result
+
+    # TheSportsDB
+    tsdb_id = TSDB_IDS.get(league_name)
+    if tsdb_id:
+        for season in ["2025-2026", "2024-2025"]:
+            try:
+                async with httpx.AsyncClient(timeout=10) as c:
+                    r = await c.get(
+                        "https://www.thesportsdb.com/api/v1/json/3/lookuptable.php",
+                        params={"l": tsdb_id, "s": season}
+                    )
+                    rows = r.json().get("table") or []
+                    if rows:
+                        result = []
+                        for i, row in enumerate(rows):
+                            name = _norm_name(row.get("strTeam", ""), league_name)
+                            result.append({
+                                "rank":          int(row.get("intRank", i+1)),
+                                "team_id":       _team_id(name),
+                                "team_name":     name,
+                                "points":        int(row.get("intPoints", 0)),
+                                "played":        int(row.get("intPlayed", 0)),
+                                "won":           int(row.get("intWin", 0)),
+                                "drawn":         int(row.get("intDraw", 0)),
+                                "lost":          int(row.get("intLoss", 0)),
+                                "goals_for":     int(row.get("intGoalsFor", 0)),
+                                "goals_against": int(row.get("intGoalsAgainst", 0)),
+                                "goal_diff":     int(row.get("intGoalDifference", 0)),
+                                "form":          row.get("strForm", ""),
+                            })
+                        print(f"[TheSportsDB] {league_name}: {len(result)} teams")
+                        return result
+            except Exception as e:
+                print(f"[TheSportsDB] {league_name}: {e}")
+
+    # Fallback mocks
+    if league_name == "2SNL":
+        return _mock_standings_2snl()
+    return _mock_standings()
 
 
-async def fetch_past_results(league_id: int = 212, last_n: int = 20) -> list:
-    league = next((k for k,v in TOURNAMENT_IDS.items() if v["id"] == league_id), "PrvaLiga")
-    cfg = TOURNAMENT_IDS.get(league, {})
-    try:
-        data = await _sf_get(f"/unique-tournament/{cfg['id']}/season/{cfg['season']}/events/last/0")
-        events = data.get("events", [])
-        results = []
-        for ev in events[:last_n]:
-            hg = ev.get("homeScore",{}).get("current",0) or 0
-            ag = ev.get("awayScore",{}).get("current",0) or 0
-            ts = ev.get("startTimestamp",0)
-            results.append({
-                "id":         str(ev.get("id","")),
-                "date":       datetime.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else "",
-                "home_team":  ev.get("homeTeam",{}).get("name",""),
-                "away_team":  ev.get("awayTeam",{}).get("name",""),
-                "home_goals": hg,
-                "away_goals": ag,
-                "status":     "FT",
-            })
-        return results
-    except:
-        return []
+# ── Backward compat ───────────────────────────────────────────────────────
+
+async def fetch_team_form_for_event(event_id, is_home: bool) -> dict:
+    return _mock_form(0)
 
 
-# ── Mock data (SLO only) ─────────────────────────────────────────────────
+# ── Mock data ─────────────────────────────────────────────────────────────
 
 def _mock_matches(league_name: str = None) -> list:
     today = date.today().isoformat()
@@ -377,16 +379,13 @@ def _mock_matches(league_name: str = None) -> list:
 
 def _get_hardcoded_fixtures() -> list:
     return [
-        {"id":"p26_01","date":"2026-03-07T20:00:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 26","home_team":"NS Mura","home_team_id":1600,"away_team":"NK Primorje Ajdovščina","away_team_id":99991,"venue":"Fazanerija"},
-        {"id":"p26_02","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 26","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Maribor","away_team_id":1601,"venue":"Stožice"},
-        {"id":"p26_03","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 26","home_team":"NK Aluminij","home_team_id":10576,"away_team":"FC Koper","away_team_id":2279,"venue":"Aluminij Stadium"},
-        {"id":"p26_04","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 26","home_team":"NK Radomlje","home_team_id":14370,"away_team":"NK Bravo","away_team_id":10203,"venue":"Radomlje"},
-        {"id":"p26_05","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 26","home_team":"NK Celje","home_team_id":1594,"away_team":"ND Gorica","away_team_id":99993,"venue":"Arena Z'dežele"},
-        {"id":"p27_01","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 27","home_team":"NK Maribor","home_team_id":1601,"away_team":"NS Mura","away_team_id":1600,"venue":"Ljudski vrt"},
-        {"id":"p27_02","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 27","home_team":"NK Primorje Ajdovščina","home_team_id":99991,"away_team":"NK Celje","away_team_id":1594,"venue":"Ajdovščina"},
-        {"id":"p27_03","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 27","home_team":"FC Koper","home_team_id":2279,"away_team":"NK Olimpija Ljubljana","away_team_id":1598,"venue":"Bonifika"},
-        {"id":"p27_04","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 27","home_team":"NK Bravo","home_team_id":10203,"away_team":"NK Aluminij","away_team_id":10576,"venue":"ZAK"},
-        {"id":"p27_05","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":212,"round":"Round 27","home_team":"ND Gorica","home_team_id":99993,"away_team":"NK Radomlje","away_team_id":14370,"venue":"Nova Gorica"},
+        {"id":"p26_02","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 26","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Maribor","away_team_id":1601,"venue":"Stožice"},
+        {"id":"p26_03","date":"2026-03-08T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 26","home_team":"NK Aluminij","home_team_id":10576,"away_team":"FC Koper","away_team_id":2279,"venue":"Aluminij Stadium"},
+        {"id":"p26_04","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 26","home_team":"NK Radomlje","home_team_id":14370,"away_team":"NK Bravo","away_team_id":10203,"venue":"Radomlje"},
+        {"id":"p26_05","date":"2026-03-09T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 26","home_team":"NK Celje","home_team_id":1594,"away_team":"ND Gorica","away_team_id":99993,"venue":"Arena Z'dežele"},
+        {"id":"p27_01","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"NK Maribor","home_team_id":1601,"away_team":"NS Mura","away_team_id":1600,"venue":"Ljudski vrt"},
+        {"id":"p27_02","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"NK Primorje Ajdovščina","home_team_id":99991,"away_team":"NK Celje","away_team_id":1594,"venue":"Ajdovščina"},
+        {"id":"p27_03","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"FC Koper","home_team_id":2279,"away_team":"NK Olimpija Ljubljana","away_team_id":1598,"venue":"Bonifika"},
     ]
 
 
@@ -404,6 +403,7 @@ _TEAM_FORM_DATA = {
     14372:{"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},
 }
 
+
 def _mock_form(team_id: int = 0) -> dict:
     data = _TEAM_FORM_DATA.get(team_id)
     if data:
@@ -414,11 +414,10 @@ def _mock_form(team_id: int = 0) -> dict:
                  ["D","W","L","W","W","D","W"],["L","W","D","L","W","W","W"],
                  ["W","L","W","D","L","W","D"],["D","D","W","L","D","W","L"],
                  ["L","W","L","W","D","L","W"]]
-        sc = [2,1,3,1,2,0,2][seed:] + [2,1,3,1,2,0,2][:seed]
-        cc = [0,1,1,2,1,2,1][seed:] + [0,1,1,2,1,2,1][:seed]
+        sc = ([2,1,3,1,2,0,2][seed:] + [2,1,3,1,2,0,2][:seed])[:7]
+        cc = ([0,1,1,2,1,2,1][seed:] + [0,1,1,2,1,2,1][:seed])[:7]
         r  = pools[seed]
     n = len(r)
-    # Build synthetic recent_matches
     recent = []
     teams = ["NK Olimpija Ljubljana","NK Maribor","NK Celje","FC Koper","NK Bravo",
              "NS Mura","NK Aluminij","NK Radomlje","NK Primorje Ajdovščina","ND Gorica"]
@@ -426,8 +425,7 @@ def _mock_form(team_id: int = 0) -> dict:
     for i, (res, tg, og) in enumerate(zip(r, sc, cc)):
         opp = teams[(team_id + i) % len(teams)]
         is_home = i % 2 == 0
-        from datetime import date, timedelta
-        dt = (date.today() - timedelta(days=(n-i)*7)).strftime("%d/%m")
+        dt = (date.today() - timedelta(days=(n-i)*7)).strftime("%m/%d")
         recent.append({
             "home": team_name if is_home else opp,
             "away": opp if is_home else team_name,
@@ -437,37 +435,34 @@ def _mock_form(team_id: int = 0) -> dict:
         })
     return {
         "form": r, "form_string": "".join(r[-5:]),
-        "avg_scored": round(sum(sc)/n,2), "avg_conceded": round(sum(cc)/n,2),
-        "clean_sheets": sum(1 for g in cc if g==0),
-        "btts_count": sum(1 for s,c in zip(sc,cc) if s>0 and c>0),
+        "avg_scored": round(sum(sc)/n, 2), "avg_conceded": round(sum(cc)/n, 2),
+        "clean_sheets": sum(1 for g in cc if g == 0),
+        "btts_count": sum(1 for s, c in zip(sc, cc) if s > 0 and c > 0),
         "games_analyzed": n, "recent_matches": recent,
     }
+
 
 def _mock_h2h() -> dict:
     return {"total_matches":8,"home_wins":4,"draws":2,"away_wins":2,
             "avg_goals_h2h":2.4,"btts_pct":62.5,"over25_pct":50.0,"recent":[]}
 
+
 def _mock_standings() -> list:
-    teams=[("NK Olimpija Ljubljana",1598,52),("NK Celje",1594,45),
-           ("NK Maribor",1601,42),("FC Koper",2279,38),("NK Bravo",10203,30),
-           ("NK Aluminij",10576,27),("NS Mura",1600,24),("NK Radomlje",14370,18),
-           ("NK Primorje Ajdovščina",99991,15),("ND Gorica",99993,10)]
+    teams = [("NK Olimpija Ljubljana",1598,52),("NK Celje",1594,45),
+             ("NK Maribor",1601,42),("FC Koper",2279,38),("NK Bravo",10203,30),
+             ("NK Aluminij",10576,27),("NS Mura",1600,24),("NK Radomlje",14370,18),
+             ("NK Primorje Ajdovščina",99991,15),("ND Gorica",99993,10)]
     return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":25,
              "won":t[2]//3,"drawn":t[2]%3,"lost":25-t[2]//3-t[2]%3,
              "goals_for":45-i*4,"goals_against":15+i*4,"goal_diff":30-i*8,
              "form":"WWDWW" if i<3 else "WDLLL"} for i,t in enumerate(teams)]
 
+
 def _mock_standings_2snl() -> list:
-    teams=[("NK Nafta 1903",14372,48),("NK Krka",88008,44),("NK Triglav",88004,40),
-           ("ND Slovan Ljubljana",99996,37),("Krško Posavje",88006,33),
-           ("ND Beltinci",99997,30),("NK Ankaran",14371,26),("NK Rudar",88002,23)]
+    teams = [("NK Nafta 1903",14372,48),("NK Krka",88008,44),("NK Triglav",88004,40),
+             ("ND Slovan Ljubljana",99996,37),("Krško Posavje",88006,33),
+             ("ND Beltinci",99997,30),("NK Ankaran",14371,26),("NK Rudar",88002,23)]
     return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":24,
              "won":t[2]//3,"drawn":t[2]%3,"lost":24-t[2]//3-t[2]%3,
              "goals_for":35-i*2,"goals_against":12+i*2,"goal_diff":23-i*4,
              "form":"WWDWW" if i<4 else "WDLLL"} for i,t in enumerate(teams)]
-
-
-# ── Backward-compat aliases (used by arg_matches.py) ─────────────────────
-async def fetch_team_form_for_event(event_id, is_home: bool) -> dict:
-    """Legacy alias — returns mock form since event-based fetch is no longer used."""
-    return _mock_form(0)

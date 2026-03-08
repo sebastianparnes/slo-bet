@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.football_api import (
     fetch_upcoming_matches, fetch_team_form,
-    fetch_h2h, fetch_standings, TOURNAMENT_IDS
+    fetch_h2h, fetch_standings, XBET_LEAGUE_IDS, LEAGUES
 )
 from app.analysis_engine import analyze_match
 from app.xbet_scraper import get_odds_for
@@ -10,7 +10,7 @@ import asyncio
 
 router = APIRouter()
 
-ALL_LEAGUES = list(TOURNAMENT_IDS.keys())
+ALL_LEAGUES = list(LEAGUES.keys())
 
 
 @router.get("/upcoming")
@@ -29,7 +29,7 @@ async def get_all_upcoming_analyzed(
     leagues: Optional[str] = Query(None, description="Comma-separated league keys"),
 ):
     if leagues:
-        league_list = [l.strip() for l in leagues.split(",") if l.strip() in TOURNAMENT_IDS]
+        league_list = [l.strip() for l in leagues.split(",") if l.strip() in LEAGUES]
     else:
         league_list = None  # all leagues
 
