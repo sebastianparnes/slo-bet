@@ -6,7 +6,8 @@ import os
 import httpx
 from typing import Any
 
-TURSO_URL   = os.getenv("TURSO_URL",   "libsql://apuestas-sebastianparnes.aws-us-east-2.turso.io")
+_raw_url = os.getenv("TURSO_URL", "libsql://apuestas-sebastianparnes.aws-us-east-2.turso.io")
+TURSO_URL = _raw_url.replace("libsql://", "https://")
 TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzI5MzQxOTgsImlkIjoiMDE5Y2NiMWMtYmYwMS03ODkzLWEzMDgtYTMwNjRhM2E5YTQ4IiwicmlkIjoiNDJjNTI4MzQtNjc4Yi00MmI4LTlhY2YtOGJhYmE4NjMwNTQwIn0.zdHB_1L8_mDbSalG1L4H8aGhH_0diw5jDHs2pN_TQR5TzmL1qrw9T-dLufp2edaNpwVorb5GVBc8jDmIn8yZBg")
 
 
@@ -105,4 +106,7 @@ def init_db():
     print("✅ Turso DB initialized")
 
 
-init_db()
+try:
+    init_db()
+except Exception as _e:
+    print(f"⚠️  Turso init warning: {_e}")
