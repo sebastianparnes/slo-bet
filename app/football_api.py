@@ -7,6 +7,7 @@ Usamos el tournament ID de PrvaLiga en Flashscore: "prva-liga" / "slovenia"
 Fallback: datos mock con equipos reales si Flashscore bloquea.
 """
 
+import asyncio
 import httpx
 import re
 from datetime import datetime, date, timedelta
@@ -440,3 +441,31 @@ def _mock_standings() -> list[dict]:
     # Real standings from PrvaLiga 2025/26
     teams=[("NK Olimpija Ljubljana",1598,52),("NK Celje",1594,45),("NK Maribor",1601,42),("FC Koper",2279,38),("NK Bravo",10203,30),("NK Aluminij",10576,27),("NS Mura",1600,24),("NK Radomlje",14370,18),("NK Primorje Ajdovščina",99991,15),("ND Gorica",99993,10)]
     return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":25,"won":t[2]//3,"drawn":t[2]%3,"lost":25-t[2]//3-t[2]%3,"goals_for":45-i*4,"goals_against":15+i*4,"goal_diff":30-i*8,"form":"WWDWW" if i<3 else "WDLLL"} for i,t in enumerate(teams)]
+
+
+# ── Compatibility alias (used by matches.py / arg_matches.py) ─────────────
+async def fetch_team_form_for_event(
+    event_id: str,
+    home_team: str, away_team: str,
+    home_team_id: int = 0, away_team_id: int = 0,
+    league_id: int = 218,
+) -> dict:
+    """Fetch form for both teams of an event. Returns {home: {...}, away: {...}}."""
+    home_id = home_team_id or _team_id(home_team)
+    away_id = away_team_id or _team_id(away_team)
+    home_form, away_form = await asyncio.gather(
+        fetch_team_form(home_id, league_id),
+        fetch_team_form(away_id, league_id),
+    )
+    return {"home": home_form, "away": away_form}
+
+
+async def fetch_h2h_for_event(
+    event_id: str,
+    home_team: str, away_team: str,
+    home_team_id: int = 0, away_team_id: int = 0,
+) -> dict:
+    """Compatibility alias for fetch_h2h."""
+    home_id = home_team_id or _team_id(home_team)
+    away_id = away_team_id or _team_id(away_team)
+    return await fetch_h2h(home_id, away_id)
