@@ -1,8 +1,8 @@
 """
-1xbet Odds Scraper — via Cloudflare Worker proxy
-=================================================
-El Worker corre en IPs de Cloudflare que 1xbet no bloquea.
-Configura: XBET_PROXY_URL=https://slo-bet-proxy.sebastianparnes26.workers.dev
+ar-xbet Scraper — vía Cloudflare Worker proxy
+=============================================
+Worker usa: /service-api/LineFeed/Get1x2_VZip?sports=1&champs=CHAMP_ID&...
+IDs de campeonato son los de ar-xbet (distintos a 1xbet).
 """
 
 import httpx
@@ -13,22 +13,31 @@ from typing import Optional
 
 _cache: dict = {}
 _cache_expiry: dict = {}
-CACHE_TTL = 300  # 5 minutos — cuotas cambian rápido
+CACHE_TTL = 300  # 5 minutos
 
+# ar-xbet championship IDs (del worker_2_.js que funcionaba)
 LEAGUE_IDS = {
-    "PrvaLiga":        118593,
-    "2SNL":            270435,
-    "PrimeraDivision": 119599,
-    "PrimeraNacional": 2922491,
-    "ChampionsLeague": 118587,
-    "PremierLeague":   88637,
-    "LaLiga":          127733,
-    "SerieA":          110163,
-    "Bundesliga":      96463,
-    "Ligue1":          12821,
-    "CroatiaHNL":      27735,
-    "SerbiaSuper":     30035,
-    "UruguayPrimera":  52183,
+    "PrvaLiga":        "30049",
+    "2SNL":            "196693",
+    "PrimeraDivision": "119599",
+    "PrimeraNacional": "2922491",
+    "ChampionsLeague": "118587",
+    "PremierLeague":   "88637",
+    "LaLiga":          "127733",
+    "SerieA":          "110163",
+    "Bundesliga":      "96463",
+    "Ligue1":          "12821",
+    "CroatiaHNL":      "27735",
+    "SerbiaSuper":     "30035",
+    "UruguayPrimera":  "52183",
+}
+
+# Mapeo liga → param para el worker helper /xbet/odds?league=X
+LEAGUE_SLUG = {
+    "PrvaLiga":        "prva",
+    "2SNL":            "2snl",
+    "PrimeraDivision": "primera",
+    "PrimeraNacional": "nacional",
 }
 
 def _get_proxy() -> str:
@@ -49,11 +58,12 @@ def _cache_set(key: str, value, ttl: int = CACHE_TTL):
 
 def _norm(name: str) -> str:
     name = (name or "").lower()
-    for p in ["nk ", "fc ", "ns ", "nd ", "fk ", "sk "]:
+    for p in ["nk ", "fc ", "ns ", "nd ", "fk ", "sk ", "cd ", "ca ", "cf "]:
         name = name.replace(p, "")
     return re.sub(r"[^a-z0-9]", "", name).strip()
 
 def _sim(a: str, b: str) -> float:
+    if not a or not b: return 0.0
     if a == b: return 1.0
     if a in b or b in a: return 0.85
     def bg(s): return {s[i:i+2] for i in range(len(s)-1)}
@@ -62,46 +72,79 @@ def _sim(a: str, b: str) -> float:
     return 2 * len(b1 & b2) / (len(b1) + len(b2))
 
 
-async def _fetch_via_proxy(path: str, params: str) -> dict | None:
-    proxy = _get_proxy()
-    if not proxy:
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(proxy, params={"path": path, "params": params})
-            if resp.status_code != 200:
-                print(f"[1xbet-proxy] HTTP {resp.status_code}: {resp.text[:200]}")
-                return None
-            return resp.json()
-    except Exception as e:
-        print(f"[1xbet-proxy] Error: {e}")
-        return None
-
-
-async def _fetch_league_games(league_id: int) -> list:
-    key = f"xbet_league_{league_id}"
+async def _fetch_league_games(league: str) -> list:
+    key = f"xbet_league_{league}"
     cached = _cache_get(key)
     if cached is not None:
         return cached
 
-    path   = "/LineFeed/GetChampionship"
-    params = f"championshipId={league_id}&lng=en&isSubGames=true&GroupEvents=true&allEventsGrouped=true&mode=4"
+    proxy = _get_proxy()
+    if not proxy:
+        return []
 
-    data = await _fetch_via_proxy(path, params)
-    if not data:
+    champ_id = LEAGUE_IDS.get(league)
+    if not champ_id:
+        print(f"[ar-xbet] No ID for league '{league}'")
+        return []
+
+    # Use worker's generic /xbet route with correct ar-xbet API
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # Try /xbet/odds helper first if league has a slug
+            slug = LEAGUE_SLUG.get(league)
+            if slug:
+                url = f"{proxy}/xbet/odds"
+                resp = await client.get(url, params={"league": slug})
+            else:
+                # Generic /xbet route
+                url = f"{proxy}/xbet"
+                params = {
+                    "path": "/service-api/LineFeed/Get1x2_VZip",
+                    "sports": "1",
+                    "champs": champ_id,
+                    "count": "50",
+                    "lng": "es",
+                    "cfview": "2",
+                    "mode": "4",
+                    "country": "14",
+                    "getEmpty": "true",
+                    "virtualSports": "true",
+                }
+                resp = await client.get(url, params=params)
+
+            print(f"[ar-xbet] {league} (champ={champ_id}) → HTTP {resp.status_code}")
+            if resp.status_code != 200:
+                print(f"[ar-xbet] Error body: {resp.text[:300]}")
+                _cache_set(key, [], ttl=60)
+                return []
+
+            data = resp.json()
+    except Exception as e:
+        print(f"[ar-xbet] Exception fetching {league}: {e}")
         _cache_set(key, [], ttl=60)
         return []
 
-    games = (
-        data.get("Value", {}).get("TopEvents") or
-        data.get("Value", {}).get("Events") or
-        data.get("Value") or
-        []
-    )
+    # Parse response — ar-xbet uses Get1x2_VZip format
+    # Value contains list of events
+    val = data.get("Value") or {}
+    games = []
+    if isinstance(val, list):
+        games = val
+    elif isinstance(val, dict):
+        games = (
+            val.get("TopEvents") or
+            val.get("Events") or
+            val.get("ChampEvents") or
+            []
+        )
+
     if not isinstance(games, list):
         games = []
 
-    print(f"[1xbet] League {league_id}: {len(games)} games found")
+    print(f"[ar-xbet] {league}: {len(games)} games found")
+    if not games:
+        print(f"[ar-xbet] Response sample: {str(data)[:400]}")
+
     _cache_set(key, games)
     return games
 
@@ -113,32 +156,36 @@ def _parse_odds(game: dict) -> dict:
         "btts_yes": None, "btts_no": None,
         "raw_url": None,
     }
-    game_id   = game.get("I")
-    league_id = game.get("LI")
-    if game_id and league_id:
-        result["raw_url"] = f"https://1xbet.com/en/line/football/{league_id}-{game_id}"
 
+    game_id   = game.get("I") or game.get("Id")
+    league_id = game.get("LI") or game.get("L")
+    if game_id and league_id:
+        result["raw_url"] = f"https://ar-xbet.com/es/line/football/{league_id}-{game_id}"
+
+    # Parse from grouped events (GE)
     for group in (game.get("GE") or []):
         gname  = (group.get("GN") or "").lower()
         events = group.get("E") or []
-        if group.get("T") == 1 or "1x2" in gname or "match result" in gname:
+        if group.get("T") == 1 or "1x2" in gname or "resultado" in gname or "match result" in gname:
             for ev in events:
                 t, c = ev.get("T"), ev.get("C")
-                if t == 1 and not result["home"]:  result["home"] = c
-                if t == 2 and not result["draw"]:  result["draw"] = c
-                if t == 3 and not result["away"]:  result["away"] = c
-        if "total" in gname and "1st" not in gname:
+                if t == 1 and not result["home"]: result["home"] = c
+                if t == 2 and not result["draw"]: result["draw"] = c
+                if t == 3 and not result["away"]: result["away"] = c
+        if "total" in gname and "1st" not in gname and "1er" not in gname:
             for ev in events:
                 n, c = (ev.get("N") or "").lower(), ev.get("C")
                 if "2.5" in n and "over"  in n and not result["over25"]:  result["over25"]  = c
                 if "2.5" in n and "under" in n and not result["under25"]: result["under25"] = c
-        if "both" in gname or "score" in gname:
+                if "2.5" in n and "más"   in n and not result["over25"]:  result["over25"]  = c
+                if "2.5" in n and "menos" in n and not result["under25"]: result["under25"] = c
+        if "both" in gname or "score" in gname or "ambos" in gname:
             for ev in events:
                 n, c = (ev.get("N") or "").lower(), ev.get("C")
-                if "yes" in n and not result["btts_yes"]: result["btts_yes"] = c
+                if ("yes" in n or "sí" in n) and not result["btts_yes"]: result["btts_yes"] = c
                 if "no"  in n and not result["btts_no"]:  result["btts_no"]  = c
 
-    # Flat fallback
+    # Flat event fallback (E array directly on game)
     if not result["home"]:
         for ev in (game.get("E") or []):
             t, c = ev.get("T"), ev.get("C")
@@ -153,20 +200,15 @@ def _parse_odds(game: dict) -> dict:
 
 async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[dict]:
     if not _has_proxy():
-        print(f"[1xbet] No proxy configured — set XBET_PROXY_URL")
+        print(f"[ar-xbet] No proxy configured — set XBET_PROXY_URL")
         return None
 
-    key = f"odds_{_norm(home_team)}_{_norm(away_team)}"
+    key = f"odds_{_norm(home_team)}_{_norm(away_team)}_{league}"
     cached = _cache_get(key)
     if cached is not None:
         return cached
 
-    league_id = LEAGUE_IDS.get(league)
-    if not league_id:
-        print(f"[1xbet] No ID for league '{league}'")
-        return None
-    games = await _fetch_league_games(league_id)
-
+    games = await _fetch_league_games(league)
     if not games:
         _cache_set(key, None, ttl=120)
         return None
@@ -175,22 +217,23 @@ async def get_odds_for(home_team: str, away_team: str, league: str) -> Optional[
     best, best_score = None, 0.0
 
     for g in games:
-        gh = _norm(g.get("O1") or g.get("HT") or "")
-        ga = _norm(g.get("O2") or g.get("AT") or "")
+        gh = _norm(g.get("O1") or g.get("HT") or g.get("Team1") or "")
+        ga = _norm(g.get("O2") or g.get("AT") or g.get("Team2") or "")
         score = (_sim(nh, gh) + _sim(na, ga)) / 2
         if score > best_score:
             best_score = score
             best = g
 
-    if not best or best_score < 0.50:
-        print(f"[1xbet] No match for '{home_team} vs {away_team}' (best={best_score:.2f})")
+    if not best or best_score < 0.40:
+        print(f"[ar-xbet] No match for '{home_team} vs {away_team}' in {league} (best={best_score:.2f})")
         _cache_set(key, None, ttl=300)
         return None
 
     odds = _parse_odds(best)
     odds["match_confidence"] = round(best_score, 3)
-    odds["xbet_home_name"]   = best.get("O1") or best.get("HT")
-    odds["xbet_away_name"]   = best.get("O2") or best.get("AT")
+    odds["xbet_home_name"]   = best.get("O1") or best.get("HT") or best.get("Team1")
+    odds["xbet_away_name"]   = best.get("O2") or best.get("AT") or best.get("Team2")
+    print(f"[ar-xbet] ✓ Matched '{home_team}' → '{odds['xbet_home_name']}' (conf={best_score:.2f})")
     _cache_set(key, odds)
     return odds
 
@@ -204,4 +247,3 @@ def implied_prob(odd: float) -> Optional[float]:
     if not odd or odd <= 1:
         return None
     return round(100 / odd, 2)
-
