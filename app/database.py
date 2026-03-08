@@ -110,3 +110,43 @@ try:
     init_db()
 except Exception as _e:
     print(f"⚠️  Turso init warning: {_e}")
+
+
+# ── Compatibility alias (usado por result_poller.py y otros) ───────────────
+class _FakeConn:
+    """Stub SQLite-like connection que delega a Turso via _run()."""
+    def cursor(self): return self
+    def close(self): pass
+    def commit(self): pass
+
+    def execute(self, sql: str, params=None):
+        results = _run(_build_stmt(sql, list(params) if params else None))
+        self._rows = _rows(results[0]) if results else []
+        return self
+
+    def executescript(self, sql: str):
+        for stmt in sql.split(";"):
+            s = stmt.strip()
+            if s:
+                try: _run(_build_stmt(s))
+                except: pass
+        return self
+
+    def fetchall(self): return self._rows
+    def fetchone(self): return self._rows[0] if self._rows else None
+    @property
+    def lastrowid(self): return 0
+    @property
+    def rowcount(self): return len(getattr(self, "_rows", []))
+
+    class Row(dict):
+        def __getitem__(self, k):
+            if isinstance(k, int):
+                return list(self.values())[k]
+            return super().__getitem__(k)
+
+    row_factory = None
+
+def get_connection() -> _FakeConn:
+    """Compatibilidad con código que usa sqlite3. Delega a Turso."""
+    return _FakeConn()
