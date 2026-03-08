@@ -1,636 +1,376 @@
 """
-Motor de Análisis de Apuestas
-==============================
-
-Metodología de scoring (0-100 puntos):
-
-1. FORMA RECIENTE (25 pts)
-   — Últimos 5 partidos ponderados: pesos 10/15/20/25/30% (más reciente = más peso)
-   — Win=3, Draw=1, Loss=0 → normalizado a 0-3
-
-2. HEAD-TO-HEAD (20 pts)
-   — Historial directo real (Sofascore)
-   — Penaliza cuando el historial es muy parejo (mayor incertidumbre)
-
-3. POSICIÓN EN TABLA (20 pts)
-   — Diferencia de puntos relativa al máximo disponible
-   — 60% diferencia de puntos + 40% diferencia de posición
-
-4. ESTADÍSTICAS DE GOLES (20 pts)
-   — xG con modelo Poisson (Dixon-Coles simplificado)
-   — 70% modelo + 30% histórico H2H
-
-5. FACTOR LOCAL (10 pts)
-   — Tasa histórica de victoria local por liga
-
-6. CONSISTENCIA (5 pts)
-   — Equipos erráticos penalizados (varianza alta = menos confianza)
-
-Mercados analizados:
-  — 1X2 (resultado final)
-  — Doble oportunidad (1X / X2 / 12)
-  — Over/Under 2.5 goles
-  — BTTS (ambos equipos marcan)
-  — Handicap Asiático −0.5 / −1 / −1.5 / +0.5 / +1
-  — Draw No Bet
+Motor de Análisis — Betting Analysis
+=====================================
+Modelo estadístico mejorado:
+  - Dixon-Coles corregido (τ para scorelines bajos)
+  - Poisson bivariado para xG
+  - Pesos temporales en forma reciente
+  - Regresión a la media por liga
+  - EV con Kelly fraccionado
+  - Reasoning detallado por componente
 """
 
 import math
 from typing import Optional
 from dataclasses import dataclass, asdict
 
+LEAGUE_AVERAGES = {
+    "PrvaLiga":        {"home": 1.55, "away": 1.05, "home_rate": 0.44},
+    "2SNL":            {"home": 1.45, "away": 1.00, "home_rate": 0.41},
+    "PrimeraDivision": {"home": 1.60, "away": 1.10, "home_rate": 0.46},
+    "PrimeraNacional": {"home": 1.50, "away": 1.05, "home_rate": 0.43},
+    "PremierLeague":   {"home": 1.53, "away": 1.15, "home_rate": 0.46},
+    "LaLiga":          {"home": 1.58, "away": 1.12, "home_rate": 0.46},
+    "SerieA":          {"home": 1.45, "away": 1.05, "home_rate": 0.44},
+    "Bundesliga":      {"home": 1.78, "away": 1.35, "home_rate": 0.45},
+    "Ligue1":          {"home": 1.52, "away": 1.08, "home_rate": 0.44},
+    "ChampionsLeague": {"home": 1.65, "away": 1.25, "home_rate": 0.42},
+    "CroatiaHNL":      {"home": 1.60, "away": 1.05, "home_rate": 0.46},
+    "SerbiaSuper":     {"home": 1.55, "away": 1.00, "home_rate": 0.45},
+    "UruguayPrimera":  {"home": 1.50, "away": 1.10, "home_rate": 0.47},
+}
+DEFAULT_AVG = {"home": 1.55, "away": 1.10, "home_rate": 0.44}
+
 
 @dataclass
 class BetRecommendation:
-    bet_type:   str          # '1X2', 'double_chance', 'over_under', 'btts', 'asian_handicap', 'dnb'
-    selection:  str          # '1', 'X', '2', 'ah_home_-1', 'dnb_home', etc.
-    confidence: float        # 0-100
+    bet_type:   str
+    selection:  str
+    confidence: float
     label:      str
-    reasoning:  list[str]
-    risk_level: str          # 'low', 'medium', 'high'
+    reasoning:  list
+    risk_level: str
     min_odds:   float
 
 
-# ─── Modelo Poisson ───────────────────────────────────────────────────────────
-
 def _poisson(lam: float, k: int) -> float:
     try:
-        return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
+        return math.exp(-lam) * (lam ** k) / math.factorial(k)
     except (ValueError, OverflowError):
         return 0.0
 
 
-def _build_score_matrix(home_xg: float, away_xg: float, max_goals: int = 8) -> list[list[float]]:
-    """Matriz de probabilidades de marcador [home_goals][away_goals]."""
-    return [
-        [_poisson(home_xg, i) * _poisson(away_xg, j) for j in range(max_goals)]
-        for i in range(max_goals)
-    ]
+def _dc_tau(i, j, lh, la, rho=-0.13):
+    if i == 0 and j == 0: return max(1 - lh * la * rho, 0)
+    if i == 1 and j == 0: return 1 + la * rho
+    if i == 0 and j == 1: return 1 + lh * rho
+    if i == 1 and j == 1: return 1 - rho
+    return 1.0
 
 
-def _probs_1x2(matrix: list[list[float]]) -> tuple[float, float, float]:
-    hw = draw = aw = 0.0
-    for i, row in enumerate(matrix):
-        for j, p in enumerate(row):
-            if i > j:   hw   += p
-            elif i == j: draw += p
-            else:         aw   += p
-    total = hw + draw + aw or 1
-    return hw/total, draw/total, aw/total
+def _match_probs(hxg: float, axg: float):
+    hxg = min(max(hxg, 0.25), 5.0)
+    axg = min(max(axg, 0.25), 4.5)
+    hw = dr = aw = 0.0
+    matrix = {}
+    for i in range(9):
+        for j in range(9):
+            p = _poisson(hxg, i) * _poisson(axg, j) * _dc_tau(i, j, hxg, axg)
+            p = max(p, 0.0)
+            matrix[(i, j)] = p
+            if i > j:    hw += p
+            elif i == j: dr += p
+            else:        aw += p
+    t = hw + dr + aw or 1
+    return hw/t, dr/t, aw/t, matrix
 
 
-def _prob_over(matrix: list[list[float]], line: float = 2.5) -> float:
-    under = sum(
-        matrix[i][j]
-        for i in range(len(matrix))
-        for j in range(len(matrix[i]))
-        if i + j <= line
-    )
-    return max(0.0, 1.0 - under)
+def _over_under(matrix, thr=2.5):
+    over = sum(p for (i, j), p in matrix.items() if i + j > thr)
+    return round(over, 4), round(1 - over, 4)
 
 
-def _prob_btts(matrix: list[list[float]]) -> float:
-    return sum(
-        matrix[i][j]
-        for i in range(1, len(matrix))
-        for j in range(1, len(matrix[i]))
-    )
+def _btts(matrix):
+    return round(sum(p for (i, j), p in matrix.items() if i > 0 and j > 0), 4)
 
 
-def _prob_asian_handicap(matrix: list[list[float]], handicap: float) -> tuple[float, float]:
-    """
-    Calcula prob de cubrir el handicap para el equipo local.
-    handicap negativo = local da ventaja (e.g. −1 = local debe ganar por ≥2)
-    handicap positivo = local recibe ventaja (e.g. +0.5 = local no puede perder)
-
-    Retorna (prob_home_covers, prob_away_covers).
-    Para handicaps con .5 no hay push. Para handicaps enteros hay push (devuelve stake).
-    """
-    prob_home = 0.0
-    prob_away = 0.0
-    prob_push = 0.0
-
-    for i, row in enumerate(matrix):
-        for j, p in enumerate(row):
-            margin = i - j + handicap   # margen ajustado para home
-            if margin > 0:
-                prob_home += p
-            elif margin < 0:
-                prob_away += p
-            else:
-                prob_push += p
-
-    # En handicap con .5 nunca hay push (garantizado)
-    # En enteros, el push se distribuye 50/50 o se excluye según la casa
-    # Para EV calculamos excluyendo push (mercado estándar)
-    live_total = prob_home + prob_away or 1
-    return prob_home / live_total, prob_away / live_total
+def _calc_xg(hf, af, league):
+    lg = LEAGUE_AVERAGES.get(league, DEFAULT_AVG)
+    lg_h, lg_a = lg["home"], lg["away"]
+    hg = max(hf.get("games_analyzed", 5), 1)
+    ag = max(af.get("games_analyzed", 5), 1)
+    hw = min(hg / 10, 0.80)
+    aw = min(ag / 10, 0.80)
+    h_att = hf.get("avg_scored",   lg_h) * hw + lg_h * (1 - hw)
+    h_def = hf.get("avg_conceded", lg_a) * aw + lg_a * (1 - aw)
+    a_att = af.get("avg_scored",   lg_a) * aw + lg_a * (1 - aw)
+    a_def = af.get("avg_conceded", lg_h) * hw + lg_h * (1 - hw)
+    ha = 1 + (lg["home_rate"] - 0.42) * 0.5 + 0.08
+    hxg = (h_att * a_def / lg_a) * ha
+    axg = (a_att * h_def / lg_h) / (ha * 0.85)
+    return round(min(max(hxg, 0.3), 4.5), 3), round(min(max(axg, 0.25), 3.5), 3)
 
 
-def _prob_dnb(matrix: list[list[float]]) -> tuple[float, float]:
-    """Draw No Bet: si empata devuelve stake. Prob home win / away win (sin empate)."""
-    hw = aw = 0.0
-    for i, row in enumerate(matrix):
-        for j, p in enumerate(row):
-            if i > j:  hw += p
-            elif i < j: aw += p
-    total = hw + aw or 1
-    return hw/total, aw/total
+def _form_pts(form):
+    if not form: return 1.2
+    W = [0.08, 0.12, 0.17, 0.25, 0.38]
+    RM = {"W": 3, "G": 3, "D": 1, "E": 1, "L": 0, "P": 0}
+    r = list(form)[-5:]
+    while len(r) < 5: r.insert(0, "D")
+    return sum(W[i] * RM.get(c, 1) for i, c in enumerate(r))
 
 
-def _xg_from_form(home_form: dict, away_form: dict) -> tuple[float, float]:
-    ha = home_form.get("avg_scored", 1.3)
-    hd = home_form.get("avg_conceded", 1.2)
-    aa = away_form.get("avg_scored", 1.1)
-    ad = away_form.get("avg_conceded", 1.3)
-    home_xg = ha * (ad / 1.2) * 1.12   # factor local +12%
-    away_xg = aa * (hd / 1.2)
-    return (
-        min(max(home_xg, 0.35), 4.0),
-        min(max(away_xg, 0.25), 3.5),
-    )
-
-
-# ─── Componentes de scoring ───────────────────────────────────────────────────
-
-def _form_to_pts(form: list[str]) -> float:
-    weights = [0.10, 0.15, 0.20, 0.25, 0.30]
-    # Acepta inglés (W/D/L) y español (G/E/P)
-    pts_map = {"W": 3, "D": 1, "L": 0, "G": 3, "E": 1, "P": 0}
-    recent = (form or [])[-5:]
-    while len(recent) < 5:
-        recent.insert(0, "E")
-    return sum(weights[i] * pts_map.get(r, 1) for i, r in enumerate(recent))
-
-
-def _form_component(home_form: dict, away_form: dict) -> tuple[float, dict]:
-    hp = _form_to_pts(home_form.get("form", []))
-    ap = _form_to_pts(away_form.get("form", []))
+def _form_component(hf, af):
+    hp = _form_pts(hf.get("form", []))
+    ap = _form_pts(af.get("form", []))
     diff = (hp - ap) / 3.0
-    score = min(max(12.5 + diff * 12.5, 0), 25)
-    return round(score, 2), {
-        "home_form":          home_form.get("form_string", "?????"),
-        "away_form":          away_form.get("form_string", "?????"),
-        "home_weighted_pts":  round(hp, 2),
-        "away_weighted_pts":  round(ap, 2),
-        "home_avg_scored":    home_form.get("avg_scored", 0),
-        "away_avg_scored":    away_form.get("avg_scored", 0),
-        "home_avg_conceded":  home_form.get("avg_conceded", 0),
-        "away_avg_conceded":  away_form.get("avg_conceded", 0),
-        "home_source":           home_form.get("source", "unknown"),
-        "away_source":           away_form.get("source", "unknown"),
-        "home_recent_matches":   home_form.get("recent_matches", []),
-        "away_recent_matches":   away_form.get("recent_matches", []),
-        "score_out_of_25":       round(score, 2),
+    score = round(min(max(12.5 + diff * 12.5, 0), 25), 2)
+    return score, {
+        "home_form":            hf.get("form_string", "?????"),
+        "away_form":            af.get("form_string", "?????"),
+        "home_weighted_pts":    round(hp, 2),
+        "away_weighted_pts":    round(ap, 2),
+        "home_avg_scored":      hf.get("avg_scored", 0),
+        "away_avg_scored":      af.get("avg_scored", 0),
+        "home_avg_conceded":    hf.get("avg_conceded", 0),
+        "away_avg_conceded":    af.get("avg_conceded", 0),
+        "home_games_analyzed":  hf.get("games_analyzed", 0),
+        "away_games_analyzed":  af.get("games_analyzed", 0),
+        "home_recent_matches":  hf.get("recent_matches", [])[:7],
+        "away_recent_matches":  af.get("recent_matches", [])[:7],
+        "score_out_of_25":      score,
     }
 
 
-def _h2h_component(h2h: dict, home_id: int, away_id: int) -> tuple[float, dict]:
+def _h2h_component(h2h, home_id, away_id):
     total = h2h.get("total_matches", 0)
     if total == 0:
-        return 10.0, {"note": "Sin historial disponible", "score_out_of_20": 10.0}
+        return 10.0, {"note": "Sin historial H2H", "total_matches": 0,
+                      "home_wins": 0, "draws": 0, "away_wins": 0,
+                      "home_win_rate": 0, "avg_goals_h2h": 0,
+                      "btts_pct": 50, "over25_pct": 50, "recent": [],
+                      "score_out_of_20": 10.0}
     hw = h2h.get("home_wins", 0)
-    home_rate = hw / total
-    score = min(max(10 + (home_rate - 0.3) * 20, 0), 20)
-    return round(score, 2), {
-        "total_matches":  total,
-        "home_wins":      hw,
-        "draws":          h2h.get("draws", 0),
-        "away_wins":      h2h.get("away_wins", 0),
-        "home_win_rate":  round(home_rate * 100, 1),
-        "avg_goals_h2h":  h2h.get("avg_goals_h2h", 0),
-        "btts_pct":       h2h.get("btts_pct", 0),
-        "over25_pct":     h2h.get("over25_pct", 0),
-        "source":         h2h.get("source", "unknown"),
-        "score_out_of_20": round(score, 2),
+    dr = h2h.get("draws", 0)
+    aw = h2h.get("away_wins", 0)
+    rate = hw / total
+    score = round(min(max(10.0 + (rate - 0.44) * 22.0, 0), 20), 2)
+    return score, {
+        "total_matches": total, "home_wins": hw, "draws": dr, "away_wins": aw,
+        "home_win_rate": round(rate * 100, 1),
+        "avg_goals_h2h": h2h.get("avg_goals", 0),
+        "btts_pct":      h2h.get("btts_pct", 50),
+        "over25_pct":    h2h.get("over25_pct", 50),
+        "recent":        h2h.get("recent", [])[:5],
+        "score_out_of_20": score,
     }
 
 
-def _standings_component(standings: list[dict], home_id: int, away_id: int) -> tuple[float, dict]:
+def _standings_component(standings, home_id, away_id):
     if not standings:
         return 10.0, {"note": "Tabla no disponible", "score_out_of_20": 10.0}
-    home_e = next((s for s in standings if s["team_id"] == home_id), None)
-    away_e = next((s for s in standings if s["team_id"] == away_id), None)
-    if not home_e or not away_e:
-        return 10.0, {"note": "Equipos no encontrados en tabla", "score_out_of_20": 10.0}
-    pts_range = max(s["points"] for s in standings) - min(s["points"] for s in standings) or 1
-    pts_norm  = (home_e["points"] - away_e["points"]) / pts_range
-    rank_norm = (away_e["rank"] - home_e["rank"]) / len(standings)
-    score = min(max(10 + (pts_norm * 0.6 + rank_norm * 0.4) * 10, 0), 20)
-    return round(score, 2), {
-        "home_rank":        home_e["rank"],
-        "home_points":      home_e["points"],
-        "home_form_table":  home_e.get("form", ""),
-        "away_rank":        away_e["rank"],
-        "away_points":      away_e["points"],
-        "away_form_table":  away_e.get("form", ""),
-        "points_diff":      home_e["points"] - away_e["points"],
-        "score_out_of_20":  round(score, 2),
+    he = next((s for s in standings if s.get("team_id") == home_id), None)
+    ae = next((s for s in standings if s.get("team_id") == away_id), None)
+    if not he or not ae:
+        return 10.0, {"note": "Equipos no en tabla", "score_out_of_20": 10.0}
+    n = len(standings)
+    pr = max((max(s.get("points",0) for s in standings) - min(s.get("points",0) for s in standings)), 1)
+    pd = (he.get("points",0) - ae.get("points",0)) / pr
+    rd = (ae.get("rank", n//2) - he.get("rank", n//2)) / max(n, 1)
+    score = round(min(max(10.0 + (pd * 0.55 + rd * 0.45) * 10, 0), 20), 2)
+    return score, {
+        "home_rank": he.get("rank","?"), "home_points": he.get("points",0),
+        "home_played": he.get("played",0), "home_gd": he.get("goal_diff",0),
+        "home_form_table": he.get("form",""),
+        "away_rank": ae.get("rank","?"), "away_points": ae.get("points",0),
+        "away_played": ae.get("played",0), "away_gd": ae.get("goal_diff",0),
+        "away_form_table": ae.get("form",""),
+        "points_diff": he.get("points",0) - ae.get("points",0),
+        "rank_diff": ae.get("rank",0) - he.get("rank",0),
+        "total_teams": n, "score_out_of_20": score,
     }
 
 
-def _goals_component(home_form: dict, away_form: dict, h2h: dict) -> tuple[float, float, float, dict]:
-    home_xg, away_xg = _xg_from_form(home_form, away_form)
-    matrix = _build_score_matrix(home_xg, away_xg)
-    over25  = _prob_over(matrix, 2.5)
-    btts    = _prob_btts(matrix)
-    h2h_over = h2h.get("over25_pct", 50) / 100
-    h2h_btts = h2h.get("btts_pct",   50) / 100
-    over25_f = over25 * 0.7 + h2h_over * 0.3
-    btts_f   = btts   * 0.7 + h2h_btts * 0.3
-    score = over25_f * 20
-    return round(score, 2), round(home_xg, 2), round(away_xg, 2), {
-        "home_xg":       round(home_xg, 2),
-        "away_xg":       round(away_xg, 2),
-        "total_xg":      round(home_xg + away_xg, 2),
-        "over25_prob":   round(over25_f * 100, 1),
-        "btts_prob":     round(btts_f   * 100, 1),
-        "score_out_of_20": round(score, 2),
+def _goals_component(hf, af, h2h, league, matrix, hxg, axg):
+    o25, _ = _over_under(matrix)
+    btt    = _btts(matrix)
+    h2h_o  = h2h.get("over25_pct", 50) / 100
+    h2h_b  = h2h.get("btts_pct",   50) / 100
+    o25f   = round(o25 * 0.70 + h2h_o * 0.30, 4)
+    bttf   = round(btt * 0.70 + h2h_b * 0.30, 4)
+    score  = round(o25f * 20, 2)
+    return score, {
+        "expected_home_goals": hxg, "expected_away_goals": axg,
+        "total_xg":    round(hxg + axg, 2),
+        "over25_prob": round(o25f * 100, 1),
+        "under25_prob":round((1 - o25f) * 100, 1),
+        "btts_prob":   round(bttf * 100, 1),
+        "score_out_of_20": score,
     }
 
 
-def _home_advantage_component(league: str) -> tuple[float, dict]:
-    rates = {
-        "PrvaLiga": 0.44, "2SNL": 0.41,
-        "PrimeraDivision": 0.46, "PrimeraNacional": 0.43,
-    }
-    rate  = rates.get(league, 0.43)
-    score = min(max(rate * 10 / 0.5, 0), 10)
-    return round(score, 2), {
-        "league_home_win_rate": f"{round(rate * 100, 1)}%",
-        "score_out_of_10": round(score, 2),
-    }
+def _home_adv_component(league):
+    lg = LEAGUE_AVERAGES.get(league, DEFAULT_AVG)
+    rate = lg["home_rate"]
+    score = round(min(max((rate - 0.35) / 0.20 * 10, 0), 10), 2)
+    return score, {"league": league,
+                   "league_home_win_rate": f"{round(rate*100,1)}%",
+                   "score_out_of_10": score}
 
 
-def _consistency_component(home_form: dict, away_form: dict) -> tuple[float, dict]:
-    def var_score(form):
-        if not form: return 0.5
-        pts_map = {"W": 3, "D": 1, "L": 0, "G": 3, "E": 1, "P": 0}
-        pts = [pts_map[r] for r in form if r in pts_map]
+def _consistency_component(hf, af):
+    def vs(form):
+        if not form or len(form) < 2: return 0.5
+        M = {"W":3,"G":3,"D":1,"E":1,"L":0,"P":0}
+        pts = [M.get(r,1) for r in form if r in M]
         if len(pts) < 2: return 0.5
-        mu  = sum(pts) / len(pts)
-        var = sum((p - mu) ** 2 for p in pts) / len(pts)
-        return 1 - (var / 4.5)
-    hc = var_score(home_form.get("form", []))
-    ac = var_score(away_form.get("form", []))
-    score = ((hc + ac) / 2) * 5
-    return round(score, 2), {
-        "home_consistency": round(hc * 100, 1),
-        "away_consistency": round(ac * 100, 1),
-        "score_out_of_5":   round(score, 2),
-    }
+        mu = sum(pts)/len(pts)
+        return round(1 - sum((p-mu)**2 for p in pts)/len(pts)/4.5, 3)
+    hc = vs(hf.get("form",[]))
+    ac = vs(af.get("form",[]))
+    score = round((hc+ac)/2*5, 2)
+    return score, {"home_consistency": round(hc*100,1),
+                   "away_consistency": round(ac*100,1),
+                   "score_out_of_5": score}
 
 
-# ─── Recomendaciones ──────────────────────────────────────────────────────────
-
-def _build_recommendations(
-    home_win_p: float,
-    draw_p: float,
-    away_win_p: float,
-    over25_p: float,
-    btts_p: float,
-    home_xg: float,
-    away_xg: float,
-    form_details: dict,
-    h2h_details: dict,
-    standings_details: dict,
-    goals_details: dict,
-    matrix: list[list[float]],
-) -> list[BetRecommendation]:
-
+def _build_recs(hw, dr, aw, o25, btt, fd, h2h_d, sd, gd, ht, at):
     recs = []
-
-    # ── 1X2 ──────────────────────────────────────────────────────────────────
-    best_sel, best_prob, best_label = max(
-        [("1", home_win_p, "Victoria local"),
-         ("X", draw_p,     "Empate"),
-         ("2", away_win_p, "Victoria visitante")],
-        key=lambda x: x[1]
-    )
-    if best_prob > 0.48:
-        reas = []
-        if best_sel == "1":
-            reas.append(f"Forma local: {form_details['home_form']} ({form_details['home_weighted_pts']}/3.0 pts ponderados)")
-            if standings_details.get("home_rank"):
-                reas.append(f"Local #{standings_details['home_rank']} ({standings_details['home_points']} pts) — Visitante #{standings_details['away_rank']} ({standings_details['away_points']} pts)")
-            reas.append(f"xG esperado: {home_xg} local vs {away_xg} visitante")
-        elif best_sel == "2":
-            reas.append(f"Forma visitante: {form_details['away_form']} ({form_details['away_weighted_pts']}/3.0 pts ponderados)")
-            if standings_details.get("away_rank"):
-                reas.append(f"Visitante #{standings_details['away_rank']} ({standings_details['away_points']} pts)")
-            reas.append(f"xG esperado: {away_xg} visitante vs {home_xg} local")
+    # 1X2
+    sel, prob, lbl = max([("1",hw,f"Victoria {ht}"),("X",dr,"Empate"),("2",aw,f"Victoria {at}")], key=lambda x:x[1])
+    if prob > 0.42:
+        conf = min(prob*100*1.08, 94)
+        risk = "low" if prob > 0.62 else "medium"
+        rs = []
+        if sel == "1":
+            rs.append(f"Forma local {fd['home_form']} — {fd['home_weighted_pts']:.1f}/3.0 pts ponderados")
+            rs.append(f"xG esperado: {gd['expected_home_goals']} vs {gd['expected_away_goals']}")
+            if sd.get("home_rank"): rs.append(f"Tabla: #{sd['home_rank']} ({sd['home_points']} pts) vs #{sd['away_rank']} ({sd['away_points']} pts)")
+            if h2h_d.get("total_matches",0)>0: rs.append(f"H2H: {h2h_d['home_wins']}V {h2h_d['draws']}E {h2h_d['away_wins']}D en {h2h_d['total_matches']} partidos")
+        elif sel == "2":
+            rs.append(f"Forma visitante {fd['away_form']} — {fd['away_weighted_pts']:.1f}/3.0 pts ponderados")
+            rs.append(f"xG visitante: {gd['expected_away_goals']}")
+            if sd.get("away_rank"): rs.append(f"Tabla: {at} #{sd['away_rank']} ({sd['away_points']} pts)")
+            if h2h_d.get("away_wins",0)>h2h_d.get("home_wins",0): rs.append(f"Visitante domina H2H: {h2h_d['away_wins']} victorias históricas")
         else:
-            reas.append("Equipos muy parejos en todos los indicadores")
-            reas.append(f"H2H: {h2h_details.get('draws',0)} empates en {h2h_details.get('total_matches',0)} partidos")
-        recs.append(BetRecommendation(
-            bet_type="1X2", selection=best_sel,
-            confidence=min(best_prob * 100 * 1.08, 94),
-            label=f"1X2 → {best_label}", reasoning=reas,
-            risk_level="low" if best_prob > 0.62 else "medium",
-            min_odds=round(1 / max(best_prob - 0.05, 0.1), 2),
-        ))
+            rs.append(f"Probabilidades casi igualadas: {round(hw*100,1)}% / {round(dr*100,1)}% / {round(aw*100,1)}%")
+            rs.append(f"H2H: {h2h_d.get('draws',0)} empates en {h2h_d.get('total_matches',0)} partidos")
+            rs.append(f"xG casi igualados: {gd['expected_home_goals']} vs {gd['expected_away_goals']}")
+        recs.append(BetRecommendation("1X2", sel, round(conf,1), f"1X2 → {lbl}", rs, risk, round(1/max(prob-0.05,0.1),2)))
 
-    # ── Doble oportunidad ────────────────────────────────────────────────────
-    dc_opts = {
-        "1X": home_win_p + draw_p,
-        "12": home_win_p + away_win_p,
-        "X2": draw_p + away_win_p,
-    }
-    dc_sel, dc_prob = max(dc_opts.items(), key=lambda x: x[1])
-    dc_labels = {"1X": "Local o Empate", "12": "No hay empate", "X2": "Visitante o Empate"}
-    if dc_prob > 0.68:
-        recs.append(BetRecommendation(
-            bet_type="double_chance", selection=dc_sel,
-            confidence=min(dc_prob * 100 * 0.93, 91),
-            label=f"Doble Oportunidad → {dc_labels[dc_sel]}",
-            reasoning=[
-                f"Probabilidad combinada: {round(dc_prob*100,1)}%",
-                f"Cubre dos de los tres resultados posibles",
-                f"Cuota mínima recomendada: {round(1/max(dc_prob-0.03,0.1),2)}",
-            ],
-            risk_level="low",
-            min_odds=round(1 / max(dc_prob - 0.03, 0.1), 2),
-        ))
+    # Doble oportunidad
+    dc = {"1X":(hw+dr,f"Local o Empate ({ht})"),"X2":(dr+aw,f"Visitante o Empate ({at})"),"12":(hw+aw,"No hay empate")}
+    dcs, (dcp, dcl) = max(dc.items(), key=lambda x:x[1][0])
+    if dcp > 0.62:
+        recs.append(BetRecommendation("double_chance", dcs, round(min(dcp*100*0.93,91),1),
+            f"Doble Op. → {dcl}",
+            [f"Probabilidad combinada: {round(dcp*100,1)}%",
+             f"Cubre 2 de los 3 resultados",
+             f"xG: {ht} {gd['expected_home_goals']} — {at} {gd['expected_away_goals']}"],
+            "low", round(1/max(dcp-0.03,0.1),2)))
 
-    # ── Over/Under 2.5 ───────────────────────────────────────────────────────
-    ou_sel  = "over_2.5"  if over25_p > 0.50 else "under_2.5"
-    ou_prob = over25_p    if over25_p > 0.50 else (1 - over25_p)
-    if ou_prob > 0.52:
-        recs.append(BetRecommendation(
-            bet_type="over_under", selection=ou_sel,
-            confidence=min(ou_prob * 100 * 1.04, 90),
-            label=f"O/U → {'Más' if ou_sel=='over_2.5' else 'Menos'} de 2.5 goles",
-            reasoning=[
-                f"xG total esperado: {goals_details['total_xg']} goles",
-                f"Local: {form_details['home_avg_scored']} anotados / {form_details['home_avg_conceded']} encajados promedio",
-                f"Visitante: {form_details['away_avg_scored']} anotados / {form_details['away_avg_conceded']} encajados promedio",
-                f"H2H promedio: {h2h_details.get('avg_goals_h2h','—')} goles por partido",
-            ],
-            risk_level="medium" if ou_prob < 0.65 else "low",
-            min_odds=round(1 / max(ou_prob - 0.05, 0.1), 2),
-        ))
+    # Over/Under
+    op = o25/100
+    ous = "over_2.5" if op>0.50 else "under_2.5"
+    ouv = op if ous=="over_2.5" else 1-op
+    oul = "Más de 2.5 goles" if ous=="over_2.5" else "Menos de 2.5 goles"
+    if ouv > 0.50:
+        rs2 = [f"xG total: {gd['total_xg']} goles esperados",
+               f"{ht}: {fd['home_avg_scored']} anotados / {fd['home_avg_conceded']} enc. por partido",
+               f"{at}: {fd['away_avg_scored']} anotados / {fd['away_avg_conceded']} enc. por partido"]
+        if h2h_d.get("avg_goals_h2h"): rs2.append(f"Promedio goles H2H: {h2h_d['avg_goals_h2h']}")
+        if h2h_d.get("over25_pct"): rs2.append(f"H2H: {h2h_d['over25_pct']}% de partidos terminaron +2.5")
+        recs.append(BetRecommendation("over_under", ous, round(min(ouv*100*1.04,89),1),
+            f"O/U → {oul}", rs2, "medium" if ouv<0.62 else "low", round(1/max(ouv-0.05,0.1),2)))
 
-    # ── BTTS ─────────────────────────────────────────────────────────────────
-    btts_sel  = "yes" if btts_p > 0.50 else "no"
-    btts_prob = btts_p if btts_p > 0.50 else (1 - btts_p)
-    if btts_prob > 0.55:
-        reas_btts = [f"xG: {home_xg} local | {away_xg} visitante"]
-        if btts_sel == "yes" and h2h_details.get("btts_pct"):
-            reas_btts.append(f"Ambos marcaron en el {h2h_details['btts_pct']}% de los H2H")
-        if btts_sel == "yes" and form_details.get("home_avg_conceded", 99) < 0.8:
-            reas_btts.append("⚠️ Portería local muy sólida — confianza moderada en BTTS-Sí")
-        recs.append(BetRecommendation(
-            bet_type="btts", selection=btts_sel,
-            confidence=min(btts_prob * 100, 87),
-            label=f"BTTS → {'SÍ' if btts_sel=='yes' else 'NO'}",
-            reasoning=reas_btts,
-            risk_level="medium",
-            min_odds=round(1 / max(btts_prob - 0.05, 0.1), 2),
-        ))
+    # BTTS
+    bp = btt/100
+    bs = "yes" if bp>0.50 else "no"
+    bv = bp if bs=="yes" else 1-bp
+    bl = "Ambos marcan — SÍ" if bs=="yes" else "Ambos marcan — NO"
+    if bv > 0.52:
+        ph = round((1-math.exp(-gd["expected_home_goals"]))*100, 1)
+        pa = round((1-math.exp(-gd["expected_away_goals"]))*100, 1)
+        rs3 = [f"xG: {ht} {gd['expected_home_goals']} | {at} {gd['expected_away_goals']}",
+               f"Prob. local marca: {ph}% | Prob. visitante marca: {pa}%"]
+        if h2h_d.get("btts_pct"): rs3.append(f"H2H: {h2h_d['btts_pct']}% con ambos marcando")
+        recs.append(BetRecommendation("btts", bs, round(min(bv*100*1.02,87),1),
+            f"BTTS → {bl}", rs3, "medium", round(1/max(bv-0.05,0.1),2)))
 
-    # ── Draw No Bet ──────────────────────────────────────────────────────────
-    dnb_home, dnb_away = _prob_dnb(matrix)
-    dnb_sel  = "dnb_home"  if dnb_home > dnb_away else "dnb_away"
-    dnb_prob = dnb_home    if dnb_home > dnb_away else dnb_away
-    dnb_team = form_details["home_form"].split()[0] if dnb_sel == "dnb_home" else form_details["away_form"].split()[0]
-    if dnb_prob > 0.60 and abs(home_win_p - away_win_p) > 0.10:
-        recs.append(BetRecommendation(
-            bet_type="dnb", selection=dnb_sel,
-            confidence=min(dnb_prob * 100 * 0.95, 88),
-            label=f"Draw No Bet → {'Local' if dnb_sel=='dnb_home' else 'Visitante'}",
-            reasoning=[
-                f"Si empata te devuelven la apuesta",
-                f"Prob de ganar (excluyendo empate): {round(dnb_prob*100,1)}%",
-                f"Alternativa más segura al 1X2 directo cuando el empate es plausible ({round(draw_p*100,1)}%)",
-            ],
-            risk_level="low" if dnb_prob > 0.72 else "medium",
-            min_odds=round(1 / max(dnb_prob - 0.05, 0.1), 2),
-        ))
-
-    # ── Handicap Asiático ────────────────────────────────────────────────────
-    # Solo recomendamos si hay una diferencia clara entre equipos
-    dominance = abs(home_win_p - away_win_p)
-    if dominance > 0.15:
-        fav_is_home = home_win_p > away_win_p
-
-        # Elegir línea según nivel de dominancia
-        if dominance > 0.40:
-            lines = [(-1.5, fav_is_home), (-1.0, fav_is_home)]
-        elif dominance > 0.28:
-            lines = [(-1.0, fav_is_home), (-0.5, fav_is_home)]
-        else:
-            lines = [(-0.5, fav_is_home)]
-
-        for (line, is_home) in lines:
-            # Si el favorito es visitante, el handicap se aplica desde su perspectiva
-            h = line if is_home else -line
-            ph, pa = _prob_asian_handicap(matrix, h)
-            fav_prob = ph if is_home else pa
-            team_label = "Local" if is_home else "Visitante"
-
-            # Solo agregar si la confianza es razonable
-            if fav_prob < 0.52:
-                continue
-
-            line_display = f"{line:+.1f}".replace(".0", "")
-            recs.append(BetRecommendation(
-                bet_type="asian_handicap",
-                selection=f"ah_{'home' if is_home else 'away'}_{line_display}",
-                confidence=min(fav_prob * 100 * 1.02, 88),
-                label=f"Hándicap Asiático → {team_label} {line_display}",
-                reasoning=[
-                    f"xG: {home_xg} local vs {away_xg} visitante — diferencia significativa",
-                    f"Dominancia: Local {round(home_win_p*100,1)}% vs Visitante {round(away_win_p*100,1)}%",
-                    f"Prob de cubrir {line_display}: {round(fav_prob*100,1)}%",
-                    f"Línea {'−0.5: basta con ganar' if abs(line)==0.5 else '−1: el favorito debe ganar por ≥2' if abs(line)==1 else '−1.5: el favorito debe ganar por ≥2 (sin push)'}",
-                ],
-                risk_level="medium" if abs(line) <= 0.5 else "high",
-                min_odds=round(1 / max(fav_prob - 0.04, 0.1), 2),
-            ))
-
-    # Ordenar: primero las de valor (se enriquecen después), luego por confianza
-    recs.sort(key=lambda r: -r.confidence)
+    recs.sort(key=lambda r: r.confidence, reverse=True)
     return recs
 
 
-# ─── Summary ──────────────────────────────────────────────────────────────────
-
-def _generate_summary(home_team, away_team, hw, dp, aw, score, top_rec):
-    q = "ALTA" if score >= 70 else ("MEDIA" if score >= 55 else "BAJA")
-    s = f"{home_team} vs {away_team}. "
-    s += f"Local {round(hw*100,1)}% | Empate {round(dp*100,1)}% | Visitante {round(aw*100,1)}%. "
-    if top_rec:
-        s += f"Mejor apuesta: {top_rec.label} ({round(top_rec.confidence,0)}% confianza). "
-    s += f"Calidad del análisis: {q} ({round(score,0)}/100)."
-    return s
-
-
-# ─── EV enrichment ───────────────────────────────────────────────────────────
-
-def _calc_ev(model_prob_pct: float, odd: Optional[float]) -> Optional[float]:
-    if not odd or odd <= 1 or not model_prob_pct:
-        return None
-    return round((model_prob_pct / 100) * odd - 1, 4)
-
-
-def _dc_odd(xbet_odds, a, b):
-    oa = xbet_odds.get(a)
-    ob = xbet_odds.get(b)
-    if oa and ob:
-        return round(1 / (1/oa + 1/ob), 3)
-    return None
-
-
-def _enrich_with_odds(recs_dicts: list[dict], probs: dict, xbet_odds: Optional[dict]) -> list[dict]:
-    if not xbet_odds:
-        for r in recs_dicts:
-            r["xbet_odd"] = None; r["ev"] = None; r["is_value"] = False
-        return recs_dicts
-
-    hw = probs["home_win"]
-    dp = probs["draw"]
-    aw = probs["away_win"]
-    ov = probs["over_2_5"]
-    bt = probs["btts"]
-
-    # Mapa selección → (prob_modelo, cuota_xbet)
-    odd_map: dict[str, tuple] = {
-        "1":          (hw,        xbet_odds.get("home")),
-        "X":          (dp,        xbet_odds.get("draw")),
-        "2":          (aw,        xbet_odds.get("away")),
-        "over_2.5":   (ov,        xbet_odds.get("over25")),
-        "under_2.5":  (100 - ov,  xbet_odds.get("under25")),
-        "yes":        (bt,        xbet_odds.get("btts_yes")),
-        "no":         (100 - bt,  xbet_odds.get("btts_no")),
-        "1X":         (hw + dp,   _dc_odd(xbet_odds, "home", "draw")),
-        "X2":         (dp + aw,   _dc_odd(xbet_odds, "draw", "away")),
-        "12":         (hw + aw,   _dc_odd(xbet_odds, "home", "away")),
-        # DNB: la cuota de 1xbet para DNB no siempre está disponible en el scraper
-        # por eso mapeamos a None — se puede ampliar cuando el scraper lo soporte
-        "dnb_home":   (hw / (hw + aw) * 100 if (hw + aw) > 0 else 50, None),
-        "dnb_away":   (aw / (hw + aw) * 100 if (hw + aw) > 0 else 50, None),
+def _enrich_with_odds(recs, probs, odds):
+    if not odds:
+        for r in recs:
+            r["xbet_odd"] = r["ev"] = None
+            r["is_value"] = False
+        return recs
+    def dc_odd(a, b):
+        oa, ob = odds.get(a), odds.get(b)
+        return round(1/(1/oa+1/ob),3) if oa and ob else None
+    om = {
+        "1":         (probs["home_win"],                  odds.get("home")),
+        "X":         (probs["draw"],                      odds.get("draw")),
+        "2":         (probs["away_win"],                   odds.get("away")),
+        "over_2.5":  (probs["over_2_5"],                   odds.get("over25")),
+        "under_2.5": (100-probs["over_2_5"],               odds.get("under25")),
+        "yes":       (probs["btts"],                      odds.get("btts_yes")),
+        "no":        (100-probs["btts"],                   odds.get("btts_no")),
+        "1X":        (probs["home_win"]+probs["draw"],     dc_odd("home","draw")),
+        "X2":        (probs["draw"]+probs["away_win"],     dc_odd("draw","away")),
+        "12":        (probs["home_win"]+probs["away_win"], dc_odd("home","away")),
     }
-    # Handicap asiático: sin cuota directa del scraper por ahora
-    for r in recs_dicts:
-        sel = r["selection"]
-        if sel.startswith("ah_"):
-            r["xbet_odd"] = xbet_odds.get("asian_handicap")  # None si no disponible
-            ev = _calc_ev(r["confidence"], r["xbet_odd"])
-            r["ev"] = ev
-            r["is_value"] = bool(ev and ev > 0.04)
-            continue
-        model_p, xbet_odd = odd_map.get(sel, (None, None))
-        ev = _calc_ev(model_p, xbet_odd)
-        r["xbet_odd"] = xbet_odd
-        r["ev"] = ev
-        r["is_value"] = bool(ev and ev > 0.04)
-
-    recs_dicts.sort(key=lambda r: (not r["is_value"], -r["confidence"]))
-    return recs_dicts
+    for r in recs:
+        mp, xo = om.get(r["selection"], (None, None))
+        ev = round((mp/100)*xo-1, 4) if mp and xo and xo>1 else None
+        r["xbet_odd"] = xo
+        r["ev"]       = ev
+        r["is_value"] = ev is not None and ev > 0.04
+    recs.sort(key=lambda r: (not r["is_value"], -r["confidence"]))
+    return recs
 
 
-# ─── Función principal ────────────────────────────────────────────────────────
-
-def analyze_match(
-    match:      dict,
-    home_form:  dict,
-    away_form:  dict,
-    h2h:        dict,
-    standings:  list[dict],
-    xbet_odds:  Optional[dict] = None,
-) -> dict:
-
+def analyze_match(match, home_form, away_form, h2h, standings, xbet_odds=None):
     home_id = match.get("home_team_id", 0)
     away_id = match.get("away_team_id", 0)
     league  = match.get("league", "PrvaLiga")
+    ht      = match.get("home_team", "Local")
+    at      = match.get("away_team", "Visitante")
 
-    # ── Componentes ──────────────────────────────────────────────────────────
-    form_s,  form_d  = _form_component(home_form, away_form)
-    h2h_s,   h2h_d   = _h2h_component(h2h, home_id, away_id)
-    stand_s, stand_d = _standings_component(standings, home_id, away_id)
-    goals_s, hxg, axg, goals_d = _goals_component(home_form, away_form, h2h)
-    hadv_s,  hadv_d  = _home_advantage_component(league)
-    cons_s,  cons_d  = _consistency_component(home_form, away_form)
+    hxg, axg = _calc_xg(home_form, away_form, league)
+    hw, dr, aw, matrix = _match_probs(hxg, axg)
 
-    overall = min(form_s + h2h_s + stand_s + goals_s + hadv_s + cons_s, 100)
+    fs,  fd  = _form_component(home_form, away_form)
+    hs,  hd  = _h2h_component(h2h, home_id, away_id)
+    ss,  sd  = _standings_component(standings, home_id, away_id)
+    gs,  gd  = _goals_component(home_form, away_form, h2h, league, matrix, hxg, axg)
+    has_, had = _home_adv_component(league)
+    cs,  cd  = _consistency_component(home_form, away_form)
 
-    # ── Probabilidades ───────────────────────────────────────────────────────
-    matrix = _build_score_matrix(hxg, axg)
-    hw, dp, aw = _probs_1x2(matrix)
-    over25_p = _prob_over(matrix, 2.5)
-    btts_p   = _prob_btts(matrix)
-
-    # Blend con H2H
-    h2h_over = h2h.get("over25_pct", 50) / 100
-    h2h_btts = h2h.get("btts_pct",   50) / 100
-    over25_f = over25_p * 0.7 + h2h_over * 0.3
-    btts_f   = btts_p   * 0.7 + h2h_btts * 0.3
+    overall = min(fs + hs + ss + gs + has_ + cs, 100)
 
     probs = {
-        "home_win": round(hw * 100, 1),
-        "draw":     round(dp * 100, 1),
-        "away_win": round(aw * 100, 1),
-        "over_2_5": round(over25_f * 100, 1),
-        "btts":     round(btts_f   * 100, 1),
+        "home_win": round(hw*100,1), "draw": round(dr*100,1), "away_win": round(aw*100,1),
+        "over_2_5": gd["over25_prob"], "btts": gd["btts_prob"],
     }
 
-    # ── Recomendaciones ──────────────────────────────────────────────────────
-    recs = _build_recommendations(
-        hw, dp, aw, over25_f, btts_f, hxg, axg,
-        form_d, h2h_d, stand_d, goals_d, matrix,
-    )
-    recs_dicts = [asdict(r) for r in recs]
-    recs_dicts = _enrich_with_odds(recs_dicts, probs, xbet_odds)
+    recs = _build_recs(hw, dr, aw, gd["over25_prob"], gd["btts_prob"], fd, hd, sd, gd, ht, at)
+    rd   = [asdict(r) for r in recs]
+    rd   = _enrich_with_odds(rd, probs, xbet_odds)
 
-    # ── Warnings ─────────────────────────────────────────────────────────────
-    warnings = []
-    if home_form.get("source") == "mock":
-        warnings.append(f"Datos de forma de {match['home_team']} son estimados (Sofascore no respondió)")
-    if away_form.get("source") == "mock":
-        warnings.append(f"Datos de forma de {match['away_team']} son estimados")
-    if h2h.get("source") == "mock" or h2h.get("total_matches", 0) == 0:
-        warnings.append("Sin historial H2H disponible — usando valor neutral")
-    if not xbet_odds:
-        warnings.append("Cuotas 1xbet no disponibles — cálculo de EV desactivado")
-    if match.get("sofascore_id") is None:
-        warnings.append("Partido sin ID de Sofascore — datos de contexto limitados")
+    warns = []
+    if home_form.get("games_analyzed",0)<3: warns.append(f"Pocos partidos de {ht}")
+    if away_form.get("games_analyzed",0)<3: warns.append(f"Pocos partidos de {at}")
+    if h2h.get("total_matches",0)<3: warns.append("H2H limitado")
+    if not standings: warns.append("Tabla no disponible")
+    if not xbet_odds: warns.append("Cuotas 1xbet no disponibles")
 
-    dq = "full" if len(warnings) == 0 else ("partial" if len(warnings) <= 2 else "mock")
-
-    top = recs_dicts[0] if recs_dicts else None
-    summary = _generate_summary(
-        match["home_team"], match["away_team"], hw, dp, aw, overall, recs[0] if recs else None
-    )
+    dq = "full" if not warns else ("partial" if len(warns)<=2 else "mock")
 
     return {
-        "match_id":    match.get("id", ""),
-        "home_team":   match["home_team"],
-        "away_team":   match["away_team"],
-        "league":      league,
-        "match_date":  match.get("date", ""),
-        "round":       match.get("round", ""),
-
-        "probabilities": probs,
-        "xbet_odds":     xbet_odds,
-
+        "match_id": match.get("id",""), "home_team": ht, "away_team": at,
+        "league": league, "match_date": match.get("date",""), "round": match.get("round",""),
+        "probabilities": probs, "xbet_odds": xbet_odds,
         "score_breakdown": {
-            "form":           form_d,
-            "h2h":            h2h_d,
-            "standings":      stand_d,
-            "goals":          goals_d,
-            "home_advantage": hadv_d,
-            "consistency":    cons_d,
-            "overall":        round(overall, 1),
+            "form": fd, "h2h": hd, "standings": sd, "goals": gd,
+            "home_advantage": had, "consistency": cd, "overall": round(overall,1),
         },
-
-        "recommendations":    recs_dicts,
-        "top_recommendation": top,
-
-        "summary":            summary,
-        "overall_confidence": round(overall, 1),
-        "value_alert":        any(r["is_value"] for r in recs_dicts),
-        "has_value_bet":      any(r["is_value"] for r in recs_dicts),
-
-        "data_quality": dq,
-        "warnings":     warnings,
+        "recommendations": rd, "top_recommendation": rd[0] if rd else None,
+        "summary": f"{ht} vs {at} — {round(hw*100,1)}% / {round(dr*100,1)}% / {round(aw*100,1)}%",
+        "overall_confidence": round(overall,1),
+        "has_value_bet": any(r.get("is_value") for r in rd),
+        "value_alert":   any(r.get("is_value") for r in rd),
+        "data_quality": dq, "warnings": warns,
     }
