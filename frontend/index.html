@@ -111,8 +111,7 @@ body{
 .pg-head{margin-bottom:18px}
 
 /* ── TOOLBAR ── */
-.tbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
-.tbar::-webkit-scrollbar{height:3px}.tbar::-webkit-scrollbar-thumb{background:var(--rule)}
+.tbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
 .pill{
   font-family:var(--mono);font-size:10px;font-weight:500;
   letter-spacing:1px;text-transform:uppercase;
@@ -136,7 +135,7 @@ body{
 .h2h-matches{margin-top:8px;display:flex;flex-direction:column;gap:3px}
 .h2hm{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--surf);gap:6px}
 .h2hm-score{color:var(--ink);font-weight:600;flex-shrink:0}
-.h2hm-teams{display:flex;flex:1;justify-content:space-between;gap:6px;min-width:0;font-family:var(--mono);font-size:10px}
+.h2hm-teams{display:flex;flex:1;justify-content:space-between;gap:4px;min-width:0}
 .h2hm-teams span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
 .h2hm-date{opacity:.55;flex-shrink:0}
 
@@ -360,33 +359,6 @@ select option{background:var(--card)}
   .prow{grid-template-columns:repeat(5,1fr)}
   .prow .pb{display:block}
 }
-
-/* ── xG row ── */
-.xg-row{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;margin-bottom:4px;align-items:center}
-.xgb{text-align:center}
-.xgteam{font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.xgval{font-family:var(--mono);font-weight:600;font-size:28px;line-height:1}
-.xglabel{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
-.xgmid{display:flex;flex-direction:column;gap:5px;align-items:center;padding:0 8px;border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
-.xgstat{font-family:var(--mono);font-size:11px;display:flex;justify-content:space-between;gap:12px;white-space:nowrap}
-
-/* ── Standings comparison ── */
-.standings-cmp{border:1px solid var(--rule);margin-bottom:4px}
-.strow{display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1fr;align-items:center;padding:8px 10px;border-bottom:1px solid var(--rule)}
-.strow:last-child{border-bottom:none}
-.stcell{font-family:var(--mono);font-size:11px}
-.stcell.bold{font-weight:600;font-size:12px}
-.stcell.c{text-align:center}
-.form-str{display:flex;gap:3px;justify-content:center}
-
-/* ── Recent matches list ── */
-.recent-list{margin-top:8px;display:flex;flex-direction:column;gap:2px}
-.rm-row{display:grid;grid-template-columns:22px 1fr 52px 42px;gap:6px;align-items:center;padding:5px 8px;background:var(--surf);font-family:var(--mono);font-size:10px;transition:background .15s}.rm-row:hover{background:var(--rule)}
-.rm-badge{width:18px;height:18px;border-radius:2px;display:grid;place-items:center;font-size:9px;font-weight:700;flex-shrink:0}
-.rm-teams{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rm-score{text-align:center;font-weight:600}
-.rm-date{text-align:right;color:var(--dim);opacity:.7}
-
 </style>
 </head>
 <body>
@@ -436,21 +408,10 @@ select option{background:var(--card)}
       <strong>MODO DEMO</strong> — Los datos de equipos son simulados. Las cuotas de 1xbet se intentan obtener en vivo.
       Clave gratuita en <a href="https://www.api-football.com" target="_blank">api-football.com</a>.
     </div>
-    <div class="tbar" id="league-pills">
+    <div class="tbar">
       <button class="pill on" data-league="all">Todas</button>
-      <button class="pill" data-league="PrvaLiga">🇸🇮 PrvaLiga</button>
-      <button class="pill" data-league="2SNL">🇸🇮 2.SNL</button>
-      <button class="pill" data-league="PrimeraDivision">🇦🇷 Primera Div.</button>
-      <button class="pill" data-league="PrimeraNacional">🇦🇷 Nac. B</button>
-      <button class="pill" data-league="ChampionsLeague">🏆 Champions</button>
-      <button class="pill" data-league="PremierLeague">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier</button>
-      <button class="pill" data-league="LaLiga">🇪🇸 La Liga</button>
-      <button class="pill" data-league="SerieA">🇮🇹 Serie A</button>
-      <button class="pill" data-league="Bundesliga">🇩🇪 Bundesliga</button>
-      <button class="pill" data-league="Ligue1">🇫🇷 Ligue 1</button>
-      <button class="pill" data-league="CroatiaHNL">🇭🇷 Croatia HNL</button>
-      <button class="pill" data-league="SerbiaSuper">🇷🇸 Serbia</button>
-      <button class="pill" data-league="UruguayPrimera">🇺🇾 Uruguay</button>
+      <button class="pill" data-league="PrvaLiga">PrvaLiga</button>
+      <button class="pill" data-league="2SNL">2.SNL</button>
       <button class="pill" data-conf="1">⚡ EV+</button>
     </div>
     <div class="search-wrap">
@@ -606,35 +567,27 @@ select option{background:var(--card)}
   </div>
 </div>
 
-
 <script>
 /* ── State ── */
-let allMatches=[], _curList=[], leagueF='all', confF=false, _pre={}, updId=null;
+let allMatches=[], leagueF='all', confF=false, _pre={}, updId=null;
 let lastPendingCount = 0;
 
-const LEAGUE_FLAGS = {
-  PrvaLiga:'🇸🇮', '2SNL':'🇸🇮', PrimeraDivision:'🇦🇷', PrimeraNacional:'🇦🇷',
-  ChampionsLeague:'🏆', PremierLeague:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', LaLiga:'🇪🇸', SerieA:'🇮🇹',
-  Bundesliga:'🇩🇪', Ligue1:'🇫🇷', CroatiaHNL:'🇭🇷', SerbiaSuper:'🇷🇸', UruguayPrimera:'🇺🇾'
-};
-
-/* ── Nav ── */
+/* ── Nav (works for both desktop + mobile buttons) ── */
 function switchPage(page) {
-  document.querySelectorAll('.nb,.mnb').forEach(b=>b.classList.toggle('on',b.dataset.page===page));
-  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id==='page-'+page));
-  if(page==='history'){loadStats();loadHistory();}
+  document.querySelectorAll('.nb,.mnb').forEach(b => b.classList.toggle('on', b.dataset.page===page));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id==='page-'+page));
+  if (page==='history') { loadStats(); loadHistory(); }
 }
-document.querySelectorAll('.nb,.mnb').forEach(b=>b.addEventListener('click',()=>switchPage(b.dataset.page)));
+document.querySelectorAll('.nb,.mnb').forEach(b => b.addEventListener('click', () => switchPage(b.dataset.page)));
 
 /* ── Filters ── */
-document.querySelectorAll('.pill[data-league]').forEach(p=>p.addEventListener('click',()=>{
-  document.querySelectorAll('.pill[data-league]').forEach(x=>x.classList.remove('on'));
+document.querySelectorAll('.pill[data-league]').forEach(p => p.addEventListener('click', () => {
+  document.querySelectorAll('.pill[data-league]').forEach(x => x.classList.remove('on'));
   p.classList.add('on'); leagueF=p.dataset.league; applyF();
 }));
-document.querySelectorAll('.pill[data-conf]').forEach(p=>p.addEventListener('click',()=>{
+document.querySelectorAll('.pill[data-conf]').forEach(p => p.addEventListener('click', () => {
   confF=!confF; p.classList.toggle('on',confF); applyF();
 }));
-document.getElementById('search-input')?.addEventListener('input', applyF);
 document.getElementById('btn-ref').addEventListener('click', loadMatches);
 
 /* ── Load matches ── */
@@ -643,9 +596,9 @@ async function loadMatches() {
   btn.classList.add('spin');
   document.getElementById('cards').innerHTML=
     '<div class="loading" style="columns:auto"><div class="spinner"></div>' +
-    '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Cargando todas las ligas...</span></div>';
+    '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Analizando + 1xbet...</span></div>';
   try {
-    const d=await (await fetch('/api/matches/analyzed-all?days=7')).json();
+    const d=await (await fetch('/api/matches/analyzed-all?days=5')).json();
     allMatches=d.matches||[];
     applyF();
     if(allMatches.some(m=>m.data_quality==='full'))
@@ -663,13 +616,17 @@ function applyF() {
   if(confF) m=m.filter(x=>x.has_value_bet||(x.overall_confidence||0)>=65);
   const q=(document.getElementById('search-input')?.value||'').toLowerCase().trim();
   if(q) m=m.filter(x=>(x.home_team||'').toLowerCase().includes(q)||(x.away_team||'').toLowerCase().includes(q));
-  _curList=m;
   renderCards(m);
 }
 
+let _curList = [];
+
 function renderCards(list) {
+  _curList = list;
   const el=document.getElementById('cards');
-  if(!list.length){el.innerHTML='<div class="empty" style="columns:auto"><h3>Sin partidos</h3><p>No hay partidos con este filtro para los próximos 7 días.</p></div>';return}
+  const LEAGUE_FLAG={'PrvaLiga':'🇸🇮','2SNL':'🇸🇮','PrimeraDivision':'🇦🇷','PrimeraNacional':'🇦🇷','ChampionsLeague':'🏆','PremierLeague':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','LaLiga':'🇪🇸','SerieA':'🇮🇹','Bundesliga':'🇩🇪','Ligue1':'🇫🇷','CroatiaHNL':'🇭🇷','SerbiaSuper':'🇷🇸','UruguayPrimera':'🇺🇾'};
+  if(!list.length){el.innerHTML='<div class="empty" style="columns:auto"><h3>Sin partidos</h3><p>No hay partidos con este filtro para los próximos 7 días.</p></div>
+<h3 style="font-family:var(--mono);text-align:center;margin-top:32px">SIN PARTIDOS</h3>';return}
   el.innerHTML=list.map((m,idx)=>{
     if(m.error) return `<div class="mc"><div class="cband"><span class="cleague">${m.home_team} × ${m.away_team}</span></div><div style="padding:12px;font-family:var(--mono);font-size:11px;color:var(--dim)">Error: ${m.error}</div></div>`;
     const p=m.probabilities||{};
@@ -677,13 +634,14 @@ function renderCards(list) {
     const conf=top?.confidence||0;
     const cCls=conf>=70?'hi':conf>=55?'md':'lo';
     const pc=v=>v>=50?'hi':v>=30?'md':'lo';
-    const flag=LEAGUE_FLAGS[m.league]||'🌍';
+    const flag=LEAGUE_FLAG[m.league]||'🌍';
     const dt=m.match_date?new Date(m.match_date).toLocaleString('es-AR',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
-    const evBadge=top?.is_value?`<span class="odds-inline">EV+${top.ev}</span>`:(top?.xbet_odd?`<span class="odds-inline">@${top.xbet_odd}</span>`:'');
-    const valClass=m.has_value_bet?'val':'';
-    return `<div class="mc ${valClass}" onclick="openMatchModal(${idx})">
-      <div class="cband"><span class="cleague">${flag} ${m.league}</span><span class="cdate">${dt}</span></div>
-      <div class="cmatch"><span class="team h">${m.home_team}</span><span class="vs">VS</span><span class="team a">${m.away_team}</span></div>
+    const evBadge=top?.is_value?`<span class="odds-inline" style="color:#b5860d">⚡EV+${typeof top.ev==='number'?(top.ev*100).toFixed(1):top.ev}%</span>`:(top?.xbet_odd?`<span class="odds-inline">@${top.xbet_odd}</span>`:'');
+    const dq=m.data_quality;
+    const dqBadge=dq==='mock'?'<span style="font-family:var(--mono);font-size:8px;color:var(--red);padding:1px 4px;background:rgba(200,0,0,.1);border-radius:2px">DEMO</span>':dq==='full'?'<span style="font-family:var(--mono);font-size:8px;color:var(--green);padding:1px 4px;background:rgba(0,180,80,.1);border-radius:2px">REAL</span>':'';
+    return `<div class="mc ${m.has_value_bet?'val':''}" onclick="openMatchModal(${idx})" style="cursor:pointer">
+      <div class="cband"><span class="cleague">${flag} ${m.league}</span><span class="cdate">${dt}</span>${dqBadge}</div>
+      <div class="cmatch"><span class="team h">${m.home_team}</span><span class="vs">×</span><span class="team a">${m.away_team}</span></div>
       <div class="cprobs">
         <div class="pc"><div class="pl">Local</div><div class="pv ${pc(p.home_win||0)}">${p.home_win||'—'}%</div></div>
         <div class="pc"><div class="pl">Empate</div><div class="pv ${pc(p.draw||0)}">${p.draw||'—'}%</div></div>
@@ -694,80 +652,50 @@ function renderCards(list) {
   }).join('');
 }
 
-/* ── Match modal — opens with index to avoid escaping issues ── */
+/* ── Match modal ── */
 async function openMatchModal(idx) {
   document.getElementById('ov-match').classList.add('open');
   document.getElementById('modal-body').innerHTML='<div class="loading"><div class="spinner"></div></div>';
-
   const cached = _curList[idx];
-  // If we already have full recommendations (from analyzed-all), use them directly
-  if(cached?.recommendations?.length) {
-    renderModal(cached);
-    return;
-  }
-  // Otherwise fetch fresh analysis
-  const id = cached?.match_id || cached?.id;
+  // Already has full analysis data from analyzed-all
+  if(cached?.recommendations?.length) { renderModal(cached); return; }
+  // Fallback: fetch analysis by id
+  const id = cached?.match_id || cached?.id || '';
   const league = cached?.league || '';
-  try {
-    const url=`/api/matches/${id}/analysis?league=${league}`;
-    renderModal(await (await fetch(url)).json());
-  } catch(e) {
-    document.getElementById('modal-body').innerHTML=`<p style="font-family:var(--mono);color:var(--red)">Error: ${e.message}</p>`;
-  }
+  try{renderModal(await (await fetch(`/api/matches/${id}/analysis?league=${league}`)).json())}
+  catch(e){document.getElementById('modal-body').innerHTML=`<p style="font-family:var(--mono);color:var(--red)">Error: ${e.message}</p>`}
 }
 
 function renderModal(d) {
-  const flag=LEAGUE_FLAGS[d.league]||'🌍';
-  const dt=d.match_date?new Date(d.match_date).toLocaleString('es-AR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):''
+  const LEAGUE_FLAG={'PrvaLiga':'🇸🇮','2SNL':'🇸🇮','PrimeraDivision':'🇦🇷','PrimeraNacional':'🇦🇷','ChampionsLeague':'🏆','PremierLeague':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','LaLiga':'🇪🇸','SerieA':'🇮🇹','Bundesliga':'🇩🇪','Ligue1':'🇫🇷','CroatiaHNL':'🇭🇷','SerbiaSuper':'🇷🇸','UruguayPrimera':'🇺🇾'};
+  const flag=LEAGUE_FLAG[d.league]||'🌍';
+  const dt=d.match_date?new Date(d.match_date).toLocaleString('es-AR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'';
   document.getElementById('modal-title').textContent=`${d.home_team} × ${d.away_team}`;
 
   const p=d.probabilities||{}, bd=d.score_breakdown||{}, recs=d.recommendations||[], odds=d.xbet_odds;
   const fcol=c=>({'W':'var(--green)','G':'var(--green)','D':'#b5860d','E':'#b5860d','L':'var(--red)','P':'var(--red)'}[c]||'var(--dim)');
   const flbl=c=>({'W':'G','G':'G','D':'E','E':'E','L':'P','P':'P'}[c]||'?');
 
-  // ── H2H recent list ──
-  const h2h=bd.h2h||{};
-  const h2hRecent=h2h.recent||[];
+  // ── Forma reciente: lista de partidos reales ──
+  const hfRecent = (bd.form?.home_recent_matches||[]);
+  const afRecent = (bd.form?.away_recent_matches||[]);
 
-  // Which H2H games = local gana / empate / visita gana
-  function h2hResultBadge(r){
-    const [hg,ag]=(r.score||'0-0').split('-').map(Number);
-    const isHomeTeam=r.home===d.home_team||(r.home||'').toLowerCase().includes((d.home_team||'').split(' ').pop().toLowerCase());
-    if(hg===ag) return {lbl:'E',col:'#b5860d',txt:'Empate'};
-    if(hg>ag)   return isHomeTeam?{lbl:'LG',col:'var(--green)',txt:'Local gana'}:{lbl:'VG',col:'var(--red)',txt:'Visita gana'};
-    return isHomeTeam?{lbl:'VG',col:'var(--red)',txt:'Visita gana'}:{lbl:'LG',col:'var(--green)',txt:'Local gana'};
-  }
-
-  const h2hRowsHTML=h2hRecent.map(r=>{
-    const bd2=h2hResultBadge(r);
-    return `<div class="h2hm" style="border-left:3px solid ${bd2.col}">
-      <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${bd2.col};min-width:22px">${bd2.lbl}</span>
-      <div class="h2hm-teams"><span>${r.home}</span><span style="opacity:.35">vs</span><span>${r.away}</span></div>
-      <div class="h2hm-score">${r.score}</div>
-      <div class="h2hm-date">${r.date}</div>
-    </div>`;
-  }).join('');
-
-  // ── Forma reciente con lista de partidos expandida ──
-  const hfRecent=(bd.form?.home_recent_matches||[]);
-  const afRecent=(bd.form?.away_recent_matches||[]);
-
-  function recentTableHTML(recentList){
-    if(!recentList||!recentList.length) return '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding:6px 0">Sin datos reales disponibles</div>';
-    return `<div class="recent-list">${recentList.map(m=>{
+  function recentTableHTML(recentList) {
+    if(!recentList||!recentList.length)
+      return '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);padding:6px 0;opacity:.6">Sin historial disponible</div>';
+    return recentList.slice(0,7).map(m=>{
       const res=m.result||'D';
       const c=fcol(res), lb=flbl(res);
-      const gf=m.goals_for??'?', gc=m.goals_against??'?';
-      return `<div class="rm-row" style="border-left:3px solid ${c}">
-        <span class="rm-badge" style="background:${c}">${lb}</span>
-        <span class="rm-teams" style="flex:1;min-width:0">${m.home} <span style="opacity:.3">vs</span> ${m.away}</span>
-        <span class="rm-score" style="font-weight:700">${m.score}</span>
-        <span class="rm-date">${m.date}</span>
+      return `<div style="display:grid;grid-template-columns:24px 1fr 48px 44px;gap:6px;align-items:center;padding:5px 8px;background:var(--surf);font-family:var(--mono);font-size:10px;border-left:3px solid ${c};margin-bottom:2px">
+        <span style="background:${c};color:#fff;font-weight:700;font-size:9px;text-align:center;padding:2px 0;border-radius:2px">${lb}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.home} <span style="opacity:.35">vs</span> ${m.away}</span>
+        <span style="font-weight:700;text-align:right">${m.score}</span>
+        <span style="opacity:.5;text-align:right">${m.date||''}</span>
       </div>`;
-    }).join('')}</div>`;
+    }).join('');
   }
 
-  function fdClickable(formStr, recentList){
+  function fdClickable(formStr, recentList) {
     const chars=(formStr||'?????').split('').filter(c=>['W','G','D','E','L','P'].includes(c));
     const recent=[...(recentList||[])].reverse();
     return chars.map((c,i)=>{
@@ -775,17 +703,38 @@ function renderModal(d) {
       const tip=m?`title="${m.home} ${m.score} ${m.away} · ${m.date}"`:'';
       const sty=m?`cursor:help;border-bottom:1.5px dotted ${fcol(c)};padding-bottom:1px;`:'';
       return `<span ${tip} style="color:${fcol(c)};font-weight:700;font-size:15px;${sty}">${flbl(c)}</span>`;
-    }).join('<span style="opacity:.25;font-size:11px"> · </span>');
+    }).join('<span style="opacity:.2;font-size:11px"> · </span>');
   }
+
+  // ── H2H ──
+  const h2h=bd.h2h||{};
+  const h2hRecent=h2h.recent||[];
+  function h2hBadge(r){
+    const parts=(r.score||'0-0').split('-').map(Number);
+    const hg=parts[0]||0, ag=parts[1]||0;
+    const homeWon=(r.home||'').toLowerCase().includes((d.home_team||'').split(' ').pop().toLowerCase());
+    if(hg===ag) return {lbl:'E',col:'#b5860d'};
+    if((hg>ag&&homeWon)||(ag>hg&&!homeWon)) return {lbl:'LG',col:'var(--green)'};
+    return {lbl:'VG',col:'var(--red)'};
+  }
+  const h2hRowsHTML=h2hRecent.map(r=>{
+    const b=h2hBadge(r);
+    return `<div style="display:grid;grid-template-columns:28px 1fr 48px 50px;gap:6px;align-items:center;padding:5px 8px;background:var(--surf);font-family:var(--mono);font-size:10px;border-left:3px solid ${b.col};margin-bottom:2px">
+      <span style="color:${b.col};font-weight:700;font-size:9px">${b.lbl}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.home} vs ${r.away}</span>
+      <span style="font-weight:700;text-align:right">${r.score}</span>
+      <span style="opacity:.5;text-align:right">${r.date||''}</span>
+    </div>`;
+  }).join('');
 
   // ── Score bars ──
   const si=[
-    {l:'Forma',    v:bd.form?.score_out_of_25,         mx:25},
-    {l:'H2H',      v:bd.h2h?.score_out_of_20,          mx:20},
-    {l:'Tabla',    v:bd.standings?.score_out_of_20,     mx:20},
-    {l:'Goles',    v:bd.goals?.score_out_of_20,         mx:20},
-    {l:'Local',    v:bd.home_advantage?.score_out_of_10,mx:10},
-    {l:'Consist.', v:bd.consistency?.score_out_of_5,    mx:5},
+    {l:'Forma',    v:bd.form?.score_out_of_25,          mx:25},
+    {l:'H2H',      v:bd.h2h?.score_out_of_20,           mx:20},
+    {l:'Tabla',    v:bd.standings?.score_out_of_20,      mx:20},
+    {l:'Goles',    v:bd.goals?.score_out_of_20,          mx:20},
+    {l:'Local',    v:bd.home_advantage?.score_out_of_10, mx:10},
+    {l:'Consist.', v:bd.consistency?.score_out_of_5,     mx:5},
   ];
 
   // ── Odds ──
@@ -797,18 +746,19 @@ function renderModal(d) {
         <div class="ob"><div class="obl">Over 2.5</div><div class="obv">${odds.over25||'—'}</div></div>
         <div class="ob"><div class="obl">Under 2.5</div><div class="obv">${odds.under25||'—'}</div></div>
         <div class="ob"><div class="obl">BTTS Sí</div><div class="obv">${odds.btts_yes||'—'}</div></div>
-      </div>${odds.raw_url?`<div style="margin-top:7px;font-family:var(--mono);font-size:10px"><a href="${odds.raw_url}" target="_blank" style="color:var(--green)">Ver en 1xbet →</a></div>`:''}`
-    :`<div class="no-odds">Cuotas 1xbet no disponibles para este partido.</div>`;
+      </div>${odds.raw_url?`<div style="margin-top:6px;font-family:var(--mono);font-size:10px"><a href="${odds.raw_url}" target="_blank" style="color:var(--green)">Ver en ar-1xbet →</a></div>`:''}`
+    :`<div class="no-odds">Cuotas ar-1xbet no disponibles para este partido.</div>`;
 
   // ── xG ──
   const g=bd.goals||{};
   const xgHTML=g.expected_home_goals?`
-    <div class="sec">Goles esperados (xG)</div>
+    <div class="sec">Goles esperados (xG — Dixon-Coles)</div>
     <div class="xg-row">
       <div class="xgb"><div class="xgteam">${d.home_team}</div><div class="xgval">${g.expected_home_goals}</div><div class="xglabel">xG local</div></div>
       <div class="xgmid">
-        <div class="xgstat"><span>Over 2.5</span><strong style="color:${g.over25_prob>=55?'var(--green)':'var(--dim)'}">${g.over25_prob}%</strong></div>
-        <div class="xgstat"><span>BTTS</span><strong style="color:${g.btts_prob>=55?'var(--green)':'var(--dim)'}">${g.btts_prob}%</strong></div>
+        <div class="xgstat"><span>Over 2.5</span><strong style="color:${(g.over25_prob||0)>=55?'var(--green)':'var(--dim)'}">${g.over25_prob||0}%</strong></div>
+        <div class="xgstat"><span>BTTS</span><strong style="color:${(g.btts_prob||0)>=55?'var(--green)':'var(--dim)'}">${g.btts_prob||0}%</strong></div>
+        <div class="xgstat"><span>Total xG</span><strong>${g.total_xg||'—'}</strong></div>
       </div>
       <div class="xgb"><div class="xgteam">${d.away_team}</div><div class="xgval">${g.expected_away_goals}</div><div class="xglabel">xG visita</div></div>
     </div>`:'';
@@ -834,18 +784,21 @@ function renderModal(d) {
       </div>
     </div>`:'';
 
+  const dqLabel={'full':'✓ Datos reales de Sofascore','partial':'⚠ Datos parciales','mock':'⚠ Datos simulados (demo)'}[d.data_quality]||'';
+  const dqColor={'full':'var(--green)','partial':'#b5860d','mock':'var(--red)'}[d.data_quality]||'var(--dim)';
   const filteredWarnings=(d.warnings||[]).filter(w=>!/h2h|historial/i.test(w));
 
   document.getElementById('modal-body').innerHTML=`
-    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:12px">${flag} ${d.league} · ${dt}</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:4px">${flag} ${d.league} · ${dt}</div>
+    ${dqLabel?`<div style="font-family:var(--mono);font-size:9px;color:${dqColor};margin-bottom:12px">${dqLabel}</div>`:''}
 
-    <div class="sec">Probabilidades (Dixon-Coles)</div>
+    <div class="sec">Probabilidades (modelo Dixon-Coles)</div>
     <div class="prow">
-      <div class="pb"><div class="pbl">Local</div><div class="pbv" style="color:${p.home_win>=50?'var(--green)':p.home_win>=35?'#b5860d':'var(--dim)'}">${p.home_win||0}%</div></div>
-      <div class="pb"><div class="pbl">Empate</div><div class="pbv" style="color:${p.draw>=35?'#b5860d':'var(--dim)'}">${p.draw||0}%</div></div>
-      <div class="pb"><div class="pbl">Visita</div><div class="pbv" style="color:${p.away_win>=50?'var(--green)':p.away_win>=35?'#b5860d':'var(--dim)'}">${p.away_win||0}%</div></div>
-      <div class="pb"><div class="pbl">+2.5</div><div class="pbv" style="color:${p.over_2_5>=55?'var(--green)':'var(--dim)'}">${p.over_2_5||0}%</div></div>
-      <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${p.btts>=55?'var(--green)':'var(--dim)'}">${p.btts||0}%</div></div>
+      <div class="pb"><div class="pbl">Local</div><div class="pbv" style="color:${(p.home_win||0)>=50?'var(--green)':(p.home_win||0)>=35?'#b5860d':'var(--dim)'}">${p.home_win||0}%</div></div>
+      <div class="pb"><div class="pbl">Empate</div><div class="pbv" style="color:${(p.draw||0)>=35?'#b5860d':'var(--dim)'}">${p.draw||0}%</div></div>
+      <div class="pb"><div class="pbl">Visita</div><div class="pbv" style="color:${(p.away_win||0)>=50?'var(--green)':(p.away_win||0)>=35?'#b5860d':'var(--dim)'}">${p.away_win||0}%</div></div>
+      <div class="pb"><div class="pbl">+2.5</div><div class="pbv" style="color:${(p.over_2_5||0)>=55?'var(--green)':'var(--dim)'}">${p.over_2_5||0}%</div></div>
+      <div class="pb"><div class="pbl">BTTS</div><div class="pbv" style="color:${(p.btts||0)>=55?'var(--green)':'var(--dim)'}">${p.btts||0}%</div></div>
     </div>
 
     ${xgHTML}
@@ -859,7 +812,7 @@ function renderModal(d) {
       <div class="scbar"><div class="scfill" style="width:${Math.min((s.v||0)/s.mx*100,100).toFixed(0)}%"></div></div>
     </div>`).join('')}</div>
 
-    <div class="sec">Forma Reciente — <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">hover en cada letra para ver el partido</span></div>
+    <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover en cada letra para ver el partido</span></div>
     <div class="frow">
       <div class="fbox">
         <div class="fteam">${d.home_team}</div>
@@ -887,7 +840,7 @@ function renderModal(d) {
       <div class="h2hc"><div class="h2hl">BTTS%</div><div class="h2hv">${h2h.btts_pct}%</div></div>
       <div class="h2hc"><div class="h2hl">+2.5%</div><div class="h2hv">${h2h.over25_pct}%</div></div>
     </div>
-    ${h2hRowsHTML?`<div class="h2h-matches" style="margin-top:8px">${h2hRowsHTML}</div>`:''}
+    ${h2hRowsHTML?`<div style="margin-top:8px">${h2hRowsHTML}</div>`:''}
     `:''}
 
     <div class="sec">Recomendaciones</div>
@@ -899,7 +852,7 @@ function renderModal(d) {
             <div class="riname">${r.label}</div>
           </div>
           <div class="rbadges">
-            ${r.is_value?`<span class="badge b-ev">EV+${(r.ev*100).toFixed(1)}%</span>`:''}
+            ${r.is_value?`<span class="badge b-ev">⚡EV+${typeof r.ev==='number'?(r.ev*100).toFixed(1):r.ev}%</span>`:''}
             ${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}
             <span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span>
             <span class="badge b-conf">${Math.round(r.confidence)}%</span>
@@ -909,7 +862,6 @@ function renderModal(d) {
         ${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}
       </div>`).join('')}
     </div>
-
     ${filteredWarnings.length?`<div style="margin-top:12px">${filteredWarnings.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
 }
@@ -925,7 +877,7 @@ function openBetModal(pre={}) {
   document.getElementById('f-odds').value=pre.odd||'';
   document.getElementById('f-stake').value='';
   document.getElementById('f-notes').value='';
-  if(pre.type){document.getElementById('f-type').value=pre.type;updateSel();}
+  if(pre.type){document.getElementById('f-type').value=pre.type;updateSel()}
   if(pre.sel) document.getElementById('f-sel').value=pre.sel;
   closeOv('ov-match');
   document.getElementById('ov-bet').classList.add('open');
@@ -942,7 +894,7 @@ async function submitBet(){
   const home=document.getElementById('f-home').value.trim();
   const away=document.getElementById('f-away').value.trim();
   const stake=parseFloat(document.getElementById('f-stake').value);
-  if(!home||!away||!stake){alert('Completá: equipos y monto.');return;}
+  if(!home||!away||!stake){alert('Completá: equipos y monto.');return}
   const body={home_team:home,away_team:away,league:document.getElementById('f-lg').value,match_date:document.getElementById('f-date').value,bet_type:document.getElementById('f-type').value,bet_selection:document.getElementById('f-sel').value,odds:parseFloat(document.getElementById('f-odds').value)||null,stake,confidence_score:_pre._conf||null,recommendation:_pre._label||null,notes:document.getElementById('f-notes').value||null};
   try{
     const r=await fetch('/api/history/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -950,9 +902,9 @@ async function submitBet(){
     if(!r.ok) throw new Error(d.detail||d.error);
     closeOv('ov-bet');
     toast(`✓ Apuesta registrada — potencial: $${d.potential_win??'—'}`);
-    if(document.getElementById('page-history').classList.contains('on')){loadStats();loadHistory();}
+    if(document.getElementById('page-history').classList.contains('on')){loadStats();loadHistory()}
     updatePendingDot();
-  }catch(e){alert('Error: '+e.message);}
+  }catch(e){alert('Error: '+e.message)}
 }
 
 /* ── History ── */
@@ -988,32 +940,71 @@ async function loadHistory(){
 
 function renderHistory(bets){
   const empty=document.getElementById('hempty');
-  if(!bets.length){document.getElementById('htbody').innerHTML='';document.getElementById('bet-cards').innerHTML='';empty.style.display='block';return;}
+  if(!bets.length){document.getElementById('htbody').innerHTML='';document.getElementById('bet-cards').innerHTML='';empty.style.display='block';return}
   empty.style.display='none';
+
   const tagCls={win:'win',loss:'loss',pending:'pend',void:'void'};
   const tagLbl={win:'Ganada',loss:'Perdida',pending:'Pendiente',void:'Anulada'};
+
+  // Mobile cards
   document.getElementById('bet-cards').innerHTML=bets.map(b=>{
     const pnl=(b.actual_win||0)-(b.stake||0);
     const pStr=pnl===0?'—':`<span class="${pnl>0?'pnl-p':'pnl-n'}">${pnl>0?'+':''}$${pnl.toFixed(2)}</span>`;
     const dt=b.match_date?new Date(b.match_date).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
-    return `<div class="bet-card ${b._auto_updated?'auto-updated':''}">
-      <div class="bc-top"><div><div class="bc-match">${b.home_team} × ${b.away_team}</div><div class="bc-league">${b.league} · ${dt}</div></div><span class="tag ${tagCls[b.result]||'void'}">${tagLbl[b.result]||b.result}</span></div>
-      <div class="bc-row"><span class="bc-label">Apuesta:</span><span class="bc-val">${b.bet_type} <strong>${b.bet_selection}</strong></span>${b.odds?`<span class="bc-label" style="margin-left:6px">@${b.odds}</span>`:''}</div>
-      <div class="bc-row"><span class="bc-label">Apostado:</span><span class="bc-val">$${(b.stake||0).toFixed(2)}</span>${b.match_result?`<span class="bc-label" style="margin-left:8px">Resultado:</span><span class="bc-val">${b.match_result}</span>`:''}<span class="bc-label" style="margin-left:8px">P&L:</span><span>${pStr}</span></div>
-      <div class="bc-actions">${b.result==='pending'?`<button class="abtn" onclick="openResModal(${b.id})">Resultado</button>`:''}<button class="abtn del" onclick="delBet(${b.id})">Eliminar</button>${b.confidence_score?`<span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">${Math.round(b.confidence_score)}% conf.</span>`:''}</div>
+    const isNew=b._auto_updated;
+    return `<div class="bet-card ${isNew?'auto-updated':''}">
+      <div class="bc-top">
+        <div>
+          <div class="bc-match">${b.home_team} × ${b.away_team}</div>
+          <div class="bc-league">${b.league} · ${dt}</div>
+        </div>
+        <span class="tag ${tagCls[b.result]||'void'}">${tagLbl[b.result]||b.result}</span>
+      </div>
+      <div class="bc-row">
+        <span class="bc-label">Apuesta:</span><span class="bc-val">${b.bet_type} <strong>${b.bet_selection}</strong></span>
+        ${b.odds?`<span class="bc-label" style="margin-left:6px">@${b.odds}</span>`:''}
+      </div>
+      <div class="bc-row">
+        <span class="bc-label">Apostado:</span><span class="bc-val">$${(b.stake||0).toFixed(2)}</span>
+        ${b.match_result?`<span class="bc-label" style="margin-left:8px">Resultado:</span><span class="bc-val">${b.match_result}</span>`:''}
+        <span class="bc-label" style="margin-left:8px">P&L:</span><span>${pStr}</span>
+      </div>
+      <div class="bc-actions">
+        ${b.result==='pending'?`<button class="abtn" onclick="openResModal(${b.id})">Resultado</button>`:''}
+        <button class="abtn del" onclick="delBet(${b.id})">Eliminar</button>
+        ${b.confidence_score?`<span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">${Math.round(b.confidence_score)}% conf.</span>`:''}
+      </div>
     </div>`;
   }).join('');
+
+  // Desktop table
   document.getElementById('htbody').innerHTML=bets.map(b=>{
     const pnl=(b.actual_win||0)-(b.stake||0);
     const pStr=pnl===0?'<span style="color:var(--dim)">—</span>':`<span class="${pnl>0?'pnl-p':'pnl-n'}">${pnl>0?'+':''}$${pnl.toFixed(2)}</span>`;
     const dt=b.match_date?new Date(b.match_date).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
-    return `<tr ${b._auto_updated?'class="auto-updated"':''}><td><strong>${b.home_team}</strong> <span style="color:var(--dim)">×</span> ${b.away_team}</td><td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${b.league}</td><td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${dt}</td><td style="font-family:var(--mono);font-size:11px">${b.bet_type} <strong>${b.bet_selection}</strong></td><td style="font-family:var(--mono);font-size:11px">${b.odds||'—'}</td><td style="font-family:var(--mono);font-size:11px">$${(b.stake||0).toFixed(2)}</td><td style="font-family:var(--mono);font-size:11px">${b.actual_win>0?'$'+b.actual_win.toFixed(2):'—'}</td><td>${pStr}</td><td><span class="tag ${tagCls[b.result]||'void'}">${tagLbl[b.result]||b.result}</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${b.confidence_score?Math.round(b.confidence_score)+'%':'—'}</td><td style="display:flex;gap:4px">${b.result==='pending'?`<button class="abtn" onclick="openResModal(${b.id})">Resultado</button>`:''}<button class="abtn del" onclick="delBet(${b.id})">✕</button></td></tr>`;
+    return `<tr ${b._auto_updated?'class="auto-updated"':''}>
+      <td><strong>${b.home_team}</strong> <span style="color:var(--dim)">×</span> ${b.away_team}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${b.league}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${dt}</td>
+      <td style="font-family:var(--mono);font-size:11px">${b.bet_type} <strong>${b.bet_selection}</strong></td>
+      <td style="font-family:var(--mono);font-size:11px">${b.odds||'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px">$${(b.stake||0).toFixed(2)}</td>
+      <td style="font-family:var(--mono);font-size:11px">${b.actual_win>0?'$'+b.actual_win.toFixed(2):'—'}</td>
+      <td>${pStr}</td>
+      <td><span class="tag ${tagCls[b.result]||'void'}">${tagLbl[b.result]||b.result}</span></td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">${b.confidence_score?Math.round(b.confidence_score)+'%':'—'}</td>
+      <td style="display:flex;gap:4px">
+        ${b.result==='pending'?`<button class="abtn" onclick="openResModal(${b.id})">Resultado</button>`:''}
+        <button class="abtn del" onclick="delBet(${b.id})">✕</button>
+      </td>
+    </tr>`;
   }).join('');
 }
 
+/* ── Auto result polling ── */
 async function triggerPoll(){
   const btn=document.querySelector('.btn-poll');
-  if(btn){btn.textContent='Revisando...';btn.disabled=true;}
+  if(btn){btn.textContent='Revisando...';btn.disabled=true}
   try{
     const d=await (await fetch('/api/history/poll-now',{method:'POST'})).json();
     await loadStats(); await loadHistory();
@@ -1024,16 +1015,20 @@ async function triggerPoll(){
       banner.classList.remove('hidden');
       setTimeout(()=>banner.classList.add('hidden'),8000);
       toast(`✅ ${lastPendingCount-remaining} resultado(s) actualizado(s)`);
-    }else{toast('No hay resultados nuevos todavía');}
-  }catch(e){toast('Error: '+e.message);}
-  if(btn){btn.textContent='Revisar ahora';btn.disabled=false;}
+    } else {
+      toast('No hay resultados nuevos todavía');
+    }
+  }catch(e){toast('Error: '+e.message)}
+  if(btn){btn.textContent='Revisar ahora';btn.disabled=false}
 }
 
+/* Pending dot on mobile nav */
 function updatePendingDot(){
   const dot=document.getElementById('pending-dot');
-  if(dot) dot.classList.toggle('show',lastPendingCount>0);
+  if(dot) dot.classList.toggle('show', lastPendingCount>0);
 }
 
+/* ── Result modal ── */
 function openResModal(id){
   updId=id;
   document.getElementById('r-res').value='win';
@@ -1047,7 +1042,7 @@ async function submitResult(){
     await fetch(`/api/history/${updId}/result`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     closeOv('ov-res'); loadStats(); loadHistory();
     toast('✓ Resultado actualizado');
-  }catch(e){alert(e.message);}
+  }catch(e){alert(e.message)}
 }
 async function delBet(id){
   if(!confirm('¿Eliminar apuesta?')) return;
@@ -1055,9 +1050,11 @@ async function delBet(id){
   loadStats(); loadHistory(); toast('✓ Eliminada');
 }
 
-function ovClick(e,id){if(e.target.id===id)closeOv(id);}
-function closeOv(id){document.getElementById(id).classList.remove('open');}
+/* ── Overlay ── */
+function ovClick(e,id){if(e.target.id===id)closeOv(id)}
+function closeOv(id){document.getElementById(id).classList.remove('open')}
 
+/* ── Toast ── */
 function toast(msg){
   const t=document.createElement('div');
   t.textContent=msg;
@@ -1069,7 +1066,8 @@ function toast(msg){
 /* ── Init ── */
 updateSel();
 loadMatches();
-setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll();},15*60*1000);
+// Poll for results every 15 min if page is open
+setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll()}, 15*60*1000);
 </script>
 </body>
 </html>
