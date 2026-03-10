@@ -1,26 +1,20 @@
 """
-Football data — Sofascore API (no key requerida)
-=================================================
-- Busca el season ID actual dinámicamente (auto-actualiza cada temporada)
-- Fixtures, resultados, forma, H2H, standings para 13 ligas
-- Fallback a mock solo para SLO si Sofascore falla
+Football data — Sofascore (no key required)
+============================================
+Sofascore expone endpoints JSON públicos para fixtures, forma y tabla.
+Soporta las 13 ligas configuradas en el sistema.
+
+Fallback a datos mock cuando Sofascore no responde o bloquea desde Railway.
 """
 
 import httpx
 import re
 import asyncio
-from datetime import datetime, date, timedelta
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
-SF_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.sofascore.com/",
-    "Origin": "https://www.sofascore.com",
-}
-
-# Sofascore tournament IDs (estables, no cambian)
+# ── Sofascore tournament IDs ───────────────────────────────────────────────
 TOURNAMENT_IDS = {
     "PrvaLiga":        212,
     "2SNL":            532,
@@ -37,45 +31,149 @@ TOURNAMENT_IDS = {
     "UruguayPrimera":  278,
 }
 
-LEAGUES = TOURNAMENT_IDS  # alias
-
-# ar-xbet championship IDs
-XBET_LEAGUE_IDS = {
-    "PrvaLiga":        118593,
-    "2SNL":            270435,
-    "PrimeraDivision": 119599,
-    "PrimeraNacional": 2922491,
-    "ChampionsLeague": 118587,
-    "PremierLeague":   88637,
-    "LaLiga":          127733,
-    "SerieA":          110163,
-    "Bundesliga":      96463,
-    "Ligue1":          12821,
-    "CroatiaHNL":      27735,
-    "SerbiaSuper":     30035,
-    "UruguayPrimera":  52183,
+SF_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Referer": "https://www.sofascore.com/",
+    "Origin": "https://www.sofascore.com",
 }
 
-# Cache de season IDs (se obtienen una vez y se reusan)
+# In-memory caches
 _season_cache: dict[int, int] = {}
-
-TEAM_IDS = {
-    "NK Olimpija Ljubljana": 1598, "NK Maribor": 1601, "NK Celje": 1594,
-    "FC Koper": 2279, "NK Koper": 2279, "NK Bravo": 10203, "NS Mura": 1600,
-    "NK Mura": 1600, "NK Domžale": 1595, "NK Radomlje": 14370,
-    "NK Primorje Ajdovščina": 99991, "NK Nafta 1903": 14372,
-    "NK Aluminij": 10576, "FC Drava Ptuj": 10578, "NK Ankaran": 14371,
-    "NK Rogaška": 99992, "ND Gorica": 99993,
-}
-ID_TO_NAME = {v: k for k, v in TEAM_IDS.items()}
+_fixture_cache: dict[str, tuple[float, list]] = {}
+FIXTURE_CACHE_TTL = 300  # 5 min
 
 
-def _team_id(name: str) -> int:
-    if name in TEAM_IDS: return TEAM_IDS[name]
-    for k, v in TEAM_IDS.items():
-        if _same_team(k, name): return v
-    return abs(hash(name)) % 90000 + 10000
+# ── Season discovery ───────────────────────────────────────────────────────
 
+async def _get_season(tid: int) -> Optional[int]:
+    """Get current season ID for a tournament from Sofascore."""
+    if tid in _season_cache:
+        return _season_cache[tid]
+    async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(
+                f"https://api.sofascore.com/api/v1/unique-tournament/{tid}/seasons"
+            )
+            if r.status_code != 200:
+                return None
+            seasons = r.json().get("seasons", [])
+            if not seasons:
+                return None
+            sid = seasons[0]["id"]
+            _season_cache[tid] = sid
+            return sid
+        except Exception as e:
+            print(f"[SF] season tid={tid}: {e}")
+            return None
+
+
+# ── Fixtures ───────────────────────────────────────────────────────────────
+
+async def _fetch_sf_fixtures(league: str, days_ahead: int = 7) -> list[dict]:
+    """Fetch upcoming fixtures from Sofascore for a league."""
+    cached = _fixture_cache.get(league)
+    if cached and (time.time() - cached[0]) < FIXTURE_CACHE_TTL:
+        return cached[1]
+
+    tid = TOURNAMENT_IDS.get(league)
+    if not tid:
+        return []
+
+    sid = await _get_season(tid)
+    if not sid:
+        print(f"[SF] no season for {league} tid={tid}")
+        return []
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    cutoff_ts = now_ts + days_ahead * 86400
+    results = []
+
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        for page in range(3):
+            try:
+                url = (f"https://api.sofascore.com/api/v1/unique-tournament/{tid}"
+                       f"/season/{sid}/events/next/{page}")
+                r = await client.get(url)
+                if r.status_code != 200:
+                    break
+                events = r.json().get("events", [])
+                if not events:
+                    break
+                for e in events:
+                    ts = e.get("startTimestamp", 0)
+                    if ts > cutoff_ts:
+                        break
+                    if ts >= now_ts - 3600:  # include matches starting within last hour
+                        results.append(e)
+            except Exception as ex:
+                print(f"[SF] fixtures {league} p{page}: {ex}")
+                break
+
+    if results:
+        _fixture_cache[league] = (time.time(), results)
+    return results
+
+
+# ── Team form ─────────────────────────────────────────────────────────────
+
+async def _fetch_sf_form(team_id: int, last_n: int = 7) -> list[dict]:
+    """Fetch last N results for a team."""
+    async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(
+                f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0"
+            )
+            if r.status_code != 200:
+                return []
+            events = r.json().get("events", [])
+            return list(reversed(events))[:last_n]
+        except Exception as e:
+            print(f"[SF] form team={team_id}: {e}")
+            return []
+
+
+# ── H2H ───────────────────────────────────────────────────────────────────
+
+async def _fetch_sf_h2h(home_id: int, away_id: int) -> list[dict]:
+    async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(
+                f"https://api.sofascore.com/api/v1/event/head2head/{home_id}/{away_id}"
+            )
+            if r.status_code != 200:
+                return []
+            data = r.json()
+            return data.get("events", data.get("previousEvents", []))
+        except Exception as e:
+            print(f"[SF] h2h {home_id} vs {away_id}: {e}")
+            return []
+
+
+# ── Standings ──────────────────────────────────────────────────────────────
+
+async def _fetch_sf_standings(league: str) -> list[dict]:
+    tid = TOURNAMENT_IDS.get(league)
+    if not tid:
+        return []
+    sid = await _get_season(tid)
+    if not sid:
+        return []
+    async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(
+                f"https://api.sofascore.com/api/v1/unique-tournament/{tid}/season/{sid}/standings/total"
+            )
+            if r.status_code != 200:
+                return []
+            standings = r.json().get("standings", [])
+            return standings[0].get("rows", []) if standings else []
+        except Exception as e:
+            print(f"[SF] standings {league}: {e}")
+            return []
+
+
+# ── Parsers ────────────────────────────────────────────────────────────────
 
 def _same_team(a: str, b: str) -> bool:
     def n(s): return re.sub(r"[^a-z]", "", s.lower())
@@ -83,261 +181,143 @@ def _same_team(a: str, b: str) -> bool:
     return na == nb or (len(na) > 4 and na in nb) or (len(nb) > 4 and nb in na)
 
 
-def _norm_name(name: str, league: str = "") -> str:
-    if league not in ("PrvaLiga", "2SNL"):
-        return name.strip()
-    mapping = {
-        "olimpija": "NK Olimpija Ljubljana", "maribor": "NK Maribor",
-        "celje": "NK Celje", "koper": "FC Koper", "bravo": "NK Bravo",
-        "mura": "NS Mura", "domzale": "NK Domžale", "domžale": "NK Domžale",
-        "radomlje": "NK Radomlje", "primorje": "NK Primorje Ajdovščina",
-        "nafta": "NK Nafta 1903", "aluminij": "NK Aluminij",
-        "drava": "FC Drava Ptuj", "ankaran": "NK Ankaran",
-        "rogaska": "NK Rogaška", "rogaška": "NK Rogaška", "gorica": "ND Gorica",
+def _parse_fixture(e: dict, league: str) -> dict:
+    ts = e.get("startTimestamp", 0)
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00") if ts else ""
+    ht = e.get("homeTeam", {})
+    at = e.get("awayTeam", {})
+    return {
+        "id":            str(e.get("id", "")),
+        "match_id":      str(e.get("id", "")),
+        "date":          dt,
+        "match_date":    dt,
+        "status":        e.get("status", {}).get("type", "notstarted"),
+        "league":        league,
+        "home_team":     ht.get("name", ""),
+        "home_team_id":  ht.get("id", 0),
+        "away_team":     at.get("name", ""),
+        "away_team_id":  at.get("id", 0),
+        "venue":         (e.get("venue") or {}).get("name", ""),
+        "round":         (e.get("roundInfo") or {}).get("name", ""),
+        "_sf_home_id":   ht.get("id", 0),
+        "_sf_away_id":   at.get("id", 0),
     }
-    key = re.sub(r"[^a-zčšž]", "", name.lower().strip())
-    for k, v in mapping.items():
-        if k in key or key in k:
-            return v
-    return name.strip()
 
 
-# ── Sofascore HTTP ────────────────────────────────────────────────────────
+def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
+    results, scored, conceded, recent_matches = [], [], [], []
 
-async def _sf(path: str, retries: int = 2) -> dict:
-    url = f"https://api.sofascore.com/api/v1{path}"
-    for attempt in range(retries):
-        try:
-            async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS, follow_redirects=True) as c:
-                r = await c.get(url)
-                if r.status_code == 200:
-                    return r.json()
-                if r.status_code == 404:
-                    return {}
-                print(f"[Sofascore] {path} → {r.status_code}")
-        except Exception as e:
-            print(f"[Sofascore] {path} attempt {attempt+1}: {e}")
-            if attempt < retries - 1:
-                await asyncio.sleep(0.5)
-    return {}
-
-
-async def _get_season(tid: int) -> int:
-    """Get current season ID for a tournament. Cached."""
-    if tid in _season_cache:
-        return _season_cache[tid]
-    data = await _sf(f"/unique-tournament/{tid}/seasons")
-    seasons = data.get("seasons", [])
-    if seasons:
-        # Most recent season first
-        sid = seasons[0].get("id", 0)
-        _season_cache[tid] = sid
-        print(f"[Sofascore] Tournament {tid} → season {sid} ({seasons[0].get('name','')})")
-        return sid
-    # Fallback hardcoded (2025-26 season IDs)
-    fallback = {
-        212: 63839, 532: 63962, 155: 62562, 703: 62701,
-        7: 61644, 17: 61627, 8: 61643, 23: 61736,
-        35: 61737, 34: 61738, 44: 61827, 64: 61885, 278: 62800,
-    }
-    sid = fallback.get(tid, 63839)
-    _season_cache[tid] = sid
-    return sid
-
-
-# ── Fixtures ─────────────────────────────────────────────────────────────
-
-async def _fetch_sf_fixtures(league: str, days_ahead: int) -> list:
-    tid = TOURNAMENT_IDS.get(league)
-    if not tid:
-        return []
-
-    sid    = await _get_season(tid)
-    today  = date.today()
-    cutoff = today + timedelta(days=days_ahead)
-    matches = []
-
-    # Fetch multiple pages (page 0, 1, 2)
-    for page in range(3):
-        data   = await _sf(f"/unique-tournament/{tid}/season/{sid}/events/next/{page}")
-        events = data.get("events", [])
-        if not events:
-            break
-
-        found_in_range = False
-        for ev in events:
-            ts = ev.get("startTimestamp", 0)
-            if not ts:
-                continue
-            dt = datetime.fromtimestamp(ts)
-            if dt.date() > cutoff:
-                break
-            if dt.date() < today:
-                continue
-            found_in_range = True
-
-            status = ev.get("status", {}).get("type", "")
-            if status not in ("notstarted", "scheduled", ""):
-                continue
-
-            ht = ev.get("homeTeam", {})
-            at = ev.get("awayTeam", {})
-            home_name = _norm_name(ht.get("name", ""), league)
-            away_name = _norm_name(at.get("name", ""), league)
-
-            matches.append({
-                "id":           str(ev.get("id", "")),
-                "date":         dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                "status":       "NS",
-                "league":       league,
-                "league_id":    XBET_LEAGUE_IDS.get(league, tid),
-                "round":        ev.get("roundInfo", {}).get("name", ""),
-                "home_team":    home_name,
-                "home_team_id": ht.get("id", _team_id(home_name)),
-                "away_team":    away_name,
-                "away_team_id": at.get("id", _team_id(away_name)),
-                "venue":        (ev.get("venue") or {}).get("name", ""),
-            })
-
-        if not found_in_range and page > 0:
-            break
-
-    print(f"[Sofascore] {league}: {len(matches)} fixtures (next {days_ahead}d)")
-    return matches
-
-
-# ── Team form ─────────────────────────────────────────────────────────────
-
-async def _fetch_sf_form(team_id: int, last_n: int = 7) -> dict:
-    data   = await _sf(f"/team/{team_id}/events/previous/0")
-    events = data.get("events", [])
-
-    results, scored, conceded, recent = [], [], [], []
-    team_name_found = ""
-
-    for ev in events:
-        if ev.get("status", {}).get("type") != "finished":
+    for e in events:
+        ht = e.get("homeTeam", {})
+        at = e.get("awayTeam", {})
+        home_id = ht.get("id")
+        hs = e.get("homeScore", {})
+        as_ = e.get("awayScore", {})
+        hg = hs.get("current", hs.get("display"))
+        ag = as_.get("current", as_.get("display"))
+        if hg is None or ag is None:
             continue
-        ht  = ev.get("homeTeam", {})
-        at  = ev.get("awayTeam", {})
-        hsc = ev.get("homeScore", {})
-        asc = ev.get("awayScore", {})
-        hg  = hsc.get("current") or hsc.get("display") or 0
-        ag  = asc.get("current") or asc.get("display") or 0
 
-        is_home = ht.get("id") == team_id
+        hg, ag = int(hg), int(ag)
+        is_home = (home_id == team_sf_id)
         tg = hg if is_home else ag
         og = ag if is_home else hg
-        scored.append(tg); conceded.append(og)
 
-        # Capture team name from actual event data
-        if not team_name_found:
-            team_name_found = ht.get("name","") if is_home else at.get("name","")
+        if tg > og:    res = "W"
+        elif tg == og: res = "D"
+        else:          res = "L"
 
-        res = "W" if tg > og else ("D" if tg == og else "L")
         results.append(res)
+        scored.append(tg)
+        conceded.append(og)
 
-        ts     = ev.get("startTimestamp", 0)
-        dt_str = datetime.fromtimestamp(ts).strftime("%d/%m") if ts else ""
-        recent.append({
-            "home":          ht.get("name", "?"),
-            "away":          at.get("name", "?"),
-            "score":         f"{hg}-{ag}",
-            "date":          dt_str,
-            "result":        res,
-            "is_home":       is_home,
-            "opponent":      at.get("name", "?") if is_home else ht.get("name", "?"),
-            "goals_for":     tg,
-            "goals_against": og,
+        ts = e.get("startTimestamp", 0)
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%y") if ts else ""
+        recent_matches.append({
+            "home":   ht.get("name", ""),
+            "away":   at.get("name", ""),
+            "score":  f"{hg}-{ag}",
+            "date":   date_str,
+            "result": res,
         })
-        if len(results) >= last_n:
-            break
 
     if not results:
-        return None  # caller will use mock
+        return None
 
     n = len(results)
     return {
-        "form":            results,
-        "form_string":     "".join(results[-5:]),
-        "avg_scored":      round(sum(scored)/n, 2),
-        "avg_conceded":    round(sum(conceded)/n, 2),
-        "clean_sheets":    sum(1 for g in conceded if g == 0),
-        "btts_count":      sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
-        "games_analyzed":  n,
-        "recent_matches":  recent,
+        "form":           results,
+        "form_string":    "".join(results[:5]),
+        "avg_scored":     round(sum(scored) / n, 2),
+        "avg_conceded":   round(sum(conceded) / n, 2),
+        "clean_sheets":   sum(1 for g in conceded if g == 0),
+        "btts_count":     sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
+        "games_analyzed": n,
+        "recent_matches": recent_matches,
     }
 
 
-# ── H2H ──────────────────────────────────────────────────────────────────
-
-async def _fetch_sf_h2h(home_id: int, away_id: int) -> dict:
-    data   = await _sf(f"/event/head2head/{home_id}/{away_id}")
-    events = (data.get("firstTeamEvents") or []) + (data.get("secondTeamEvents") or [])
-    events = sorted(events, key=lambda e: e.get("startTimestamp", 0), reverse=True)[:10]
-
+def _parse_h2h_events(events: list[dict], home_name: str) -> dict:
+    if not events:
+        return _mock_h2h()
     hw = aw = draws = btts = 0
-    goals, recent = [], []
-
-    for ev in events:
-        ht_id = ev.get("homeTeam", {}).get("id")
-        hg    = (ev.get("homeScore") or {}).get("current") or (ev.get("homeScore") or {}).get("display") or 0
-        ag    = (ev.get("awayScore") or {}).get("current") or (ev.get("awayScore") or {}).get("display") or 0
-        goals.append(hg + ag)
-
+    goals_list, recent = [], []
+    for e in events[-10:]:
+        ht = e.get("homeTeam", {})
+        at = e.get("awayTeam", {})
+        hs = e.get("homeScore", {})
+        as_ = e.get("awayScore", {})
+        hg = hs.get("current", hs.get("display"))
+        ag = as_.get("current", as_.get("display"))
+        if hg is None or ag is None:
+            continue
+        hg, ag = int(hg), int(ag)
+        total = hg + ag
+        goals_list.append(total)
+        hn = ht.get("name", "")
+        is_home = _same_team(hn, home_name) if home_name else True
         if hg > ag:
-            if ht_id == home_id: hw += 1
+            if is_home: hw += 1
             else: aw += 1
         elif ag > hg:
-            if ht_id == home_id: aw += 1
+            if is_home: aw += 1
             else: hw += 1
         else:
             draws += 1
+        if hg > 0 and ag > 0:
+            btts += 1
+        ts = e.get("startTimestamp", 0)
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%y") if ts else ""
+        recent.append({"home": hn, "away": at.get("name",""), "score": f"{hg}-{ag}", "date": date_str})
 
-        if hg > 0 and ag > 0: btts += 1
-        ts     = ev.get("startTimestamp", 0)
-        dt_str = datetime.fromtimestamp(ts).strftime("%d/%m/%y") if ts else ""
-        recent.append({
-            "home":  ev.get("homeTeam", {}).get("name", "?"),
-            "away":  ev.get("awayTeam", {}).get("name", "?"),
-            "score": f"{hg}-{ag}",
-            "date":  dt_str,
-        })
-
-    n = len(goals)
+    n = len(goals_list)
     if n == 0:
         return _mock_h2h()
-
     return {
-        "total_matches": n,
-        "home_wins":     hw,
-        "draws":         draws,
-        "away_wins":     aw,
-        "avg_goals_h2h": round(sum(goals)/n, 2),
-        "btts_pct":      round(btts/n*100, 1),
-        "over25_pct":    round(sum(1 for g in goals if g > 2.5)/n*100, 1),
-        "recent":        recent,
+        "total_matches":  n,
+        "home_wins":      hw,
+        "draws":          draws,
+        "away_wins":      aw,
+        "avg_goals_h2h":  round(sum(goals_list) / n, 2),
+        "btts_pct":       round(btts / n * 100, 1),
+        "over25_pct":     round(sum(1 for g in goals_list if g > 2) / n * 100, 1),
+        "recent":         list(reversed(recent)),
     }
 
 
-# ── Standings ─────────────────────────────────────────────────────────────
-
-async def _fetch_sf_standings(league: str) -> list:
-    tid = TOURNAMENT_IDS.get(league)
-    if not tid:
-        return []
-    sid  = await _get_season(tid)
-    data = await _sf(f"/unique-tournament/{tid}/season/{sid}/standings/total")
-    rows = (data.get("standings") or [{}])[0].get("rows", [])
-
+def _parse_standings_rows(rows: list[dict]) -> list[dict]:
     result = []
-    for row in rows:
-        t    = row.get("team", {})
-        name = _norm_name(t.get("name", ""), league)
+    for i, row in enumerate(rows):
+        team = row.get("team", {})
+        form_str = ""
+        for r in (row.get("lastXGames") or {}).get("form", []):
+            if r == "win":    form_str += "W"
+            elif r == "draw": form_str += "D"
+            elif r == "loss": form_str += "L"
         result.append({
-            "rank":          row.get("position", 0),
-            "team_id":       t.get("id", _team_id(name)),
-            "team_name":     name,
+            "rank":          row.get("position", i + 1),
+            "team_id":       team.get("id", 0),
+            "team_name":     team.get("name", ""),
             "points":        row.get("points", 0),
             "played":        row.get("matches", 0),
             "won":           row.get("wins", 0),
@@ -346,190 +326,271 @@ async def _fetch_sf_standings(league: str) -> list:
             "goals_for":     row.get("scoresFor", 0),
             "goals_against": row.get("scoresAgainst", 0),
             "goal_diff":     row.get("scoresFor", 0) - row.get("scoresAgainst", 0),
-            "form":          row.get("form", ""),
+            "form":          form_str,
         })
-    print(f"[Sofascore] standings {league}: {len(result)} teams")
     return result
 
 
-# ── Public API ────────────────────────────────────────────────────────────
+# ── Public API ─────────────────────────────────────────────────────────────
 
-async def fetch_upcoming_matches(days_ahead: int = 7, leagues: list = None) -> list:
-    if leagues is None:
-        leagues = list(TOURNAMENT_IDS.keys())
-
-    tasks   = [_fetch_sf_fixtures(lg, days_ahead) for lg in leagues]
+async def fetch_upcoming_matches(days_ahead: int = 7, leagues: list = None) -> list[dict]:
+    target = leagues or list(TOURNAMENT_IDS.keys())
+    tasks = [_fetch_sf_fixtures(lg, days_ahead) for lg in target]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    all_m = []
-    for lg, res in zip(leagues, results):
-        if isinstance(res, Exception):
-            print(f"[Sofascore] {lg} error: {res}")
-            res = []
-        if res:
-            all_m.extend(res)
-        elif lg in ("PrvaLiga", "2SNL"):
-            print(f"[mock] {lg}: using hardcoded fixtures")
-            all_m.extend(_mock_matches(lg))
+    all_matches = []
+    for lg, res in zip(target, results):
+        if isinstance(res, Exception) or not res:
+            print(f"[SF] {lg}: mock fallback")
+            all_matches.extend(_mock_matches(lg))
+        else:
+            print(f"[SF] {lg}: {len(res)} fixtures")
+            all_matches.extend([_parse_fixture(e, lg) for e in res])
 
-    return sorted(all_m, key=lambda x: x["date"])
+    return sorted(all_matches, key=lambda x: x.get("date", ""))
 
 
-async def fetch_team_form(team_id: int, league_id: int = 118593, last_n: int = 7) -> dict:
-    result = await _fetch_sf_form(team_id, last_n)
-    if result:
-        return result
+async def fetch_team_form(team_id: int, league_id: int = 0, last_n: int = 7) -> dict:
+    """Fetch team form using Sofascore team ID."""
+    if not team_id:
+        return _mock_form(0)
+    events = await _fetch_sf_form(team_id, last_n=last_n)
+    parsed = _parse_form_events(events, team_id)
+    if parsed:
+        return parsed
     return _mock_form(team_id)
 
 
+async def fetch_team_form_for_event(team_id: int, league: str = "", last_n: int = 7) -> dict:
+    """Alias for backward compatibility."""
+    return await fetch_team_form(team_id, last_n=last_n)
+
+
 async def fetch_h2h(home_id: int, away_id: int) -> dict:
-    result = await _fetch_sf_h2h(home_id, away_id)
-    return result
+    if not home_id or not away_id:
+        return _mock_h2h()
+    events = await _fetch_sf_h2h(home_id, away_id)
+    return _parse_h2h_events(events, "")
 
 
-async def fetch_standings(league_id: int) -> list:
-    # Find league name by xbet ID
-    league = next((k for k, v in XBET_LEAGUE_IDS.items() if v == league_id), None)
-    if not league:
-        return _mock_standings()
+async def fetch_standings(league_id_or_name) -> list[dict]:
+    # Resolve league name
+    if isinstance(league_id_or_name, str):
+        league = league_id_or_name
+    else:
+        _id_map = {218: "PrvaLiga", 219: "2SNL", 212: "PrvaLiga"}
+        league = _id_map.get(league_id_or_name, "PrvaLiga")
 
-    result = await _fetch_sf_standings(league)
-    if result:
-        return result
-    if league == "2SNL":
-        return _mock_standings_2snl()
-    return _mock_standings()
-
-
-async def fetch_past_results(league_id: int = 118593, last_n: int = 30) -> list:
-    league = next((k for k, v in XBET_LEAGUE_IDS.items() if v == league_id), "PrvaLiga")
-    tid    = TOURNAMENT_IDS.get(league, 212)
-    sid    = await _get_season(tid)
-    data   = await _sf(f"/unique-tournament/{tid}/season/{sid}/events/last/0")
-    events = data.get("events", [])
-
-    results = []
-    for ev in events[:last_n]:
-        hg = (ev.get("homeScore") or {}).get("current") or 0
-        ag = (ev.get("awayScore") or {}).get("current") or 0
-        ts = ev.get("startTimestamp", 0)
-        ht = ev.get("homeTeam", {})
-        at = ev.get("awayTeam", {})
-        results.append({
-            "id":         str(ev.get("id", "")),
-            "date":       datetime.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else "",
-            "home_team":  _norm_name(ht.get("name", ""), league),
-            "away_team":  _norm_name(at.get("name", ""), league),
-            "home_goals": hg,
-            "away_goals": ag,
-            "status":     "FT",
-        })
-    return results
+    rows = await _fetch_sf_standings(league)
+    if rows:
+        return _parse_standings_rows(rows)
+    return _mock_standings(league)
 
 
-# ── Backward compat ───────────────────────────────────────────────────────
+# ── Mock data ──────────────────────────────────────────────────────────────
 
-async def fetch_team_form_for_event(event_id, is_home: bool) -> dict:
-    return _mock_form(0)
+_MOCK_FIXTURES: dict[str, list] = {
+    "PrvaLiga": [
+        {"id":"p1","home_team":"NK Maribor","home_team_id":1601,"away_team":"NS Mura","away_team_id":1600},
+        {"id":"p2","home_team":"NK Olimpija Ljubljana","home_team_id":1598,"away_team":"NK Celje","away_team_id":1594},
+        {"id":"p3","home_team":"FC Koper","home_team_id":2279,"away_team":"NK Bravo","away_team_id":10203},
+        {"id":"p4","home_team":"NK Aluminij","home_team_id":10576,"away_team":"NK Radomlje","away_team_id":14370},
+    ],
+    "2SNL": [
+        {"id":"s1","home_team":"NK Nafta 1903","home_team_id":14372,"away_team":"NK Krka","away_team_id":88008},
+        {"id":"s2","home_team":"NK Triglav","home_team_id":88004,"away_team":"NK Rudar","away_team_id":88002},
+    ],
+    "PrimeraDivision": [
+        {"id":"arg1","home_team":"Boca Juniors","home_team_id":26124,"away_team":"River Plate","away_team_id":26195},
+        {"id":"arg2","home_team":"Racing Club","home_team_id":26185,"away_team":"Independiente","away_team_id":26153},
+    ],
+    "PrimeraNacional": [
+        {"id":"nac1","home_team":"Almirante Brown","home_team_id":26200,"away_team":"San Telmo","away_team_id":26201},
+    ],
+    "ChampionsLeague": [
+        {"id":"cl1","home_team":"Real Madrid","home_team_id":2829,"away_team":"Bayern Munich","away_team_id":2672},
+        {"id":"cl2","home_team":"Manchester City","home_team_id":17586,"away_team":"PSG","away_team_id":1644},
+    ],
+    "PremierLeague": [
+        {"id":"pl1","home_team":"Arsenal","home_team_id":19,"away_team":"Liverpool","away_team_id":44},
+        {"id":"pl2","home_team":"Manchester City","home_team_id":17586,"away_team":"Chelsea","away_team_id":38},
+    ],
+    "LaLiga": [
+        {"id":"ll1","home_team":"Real Madrid","home_team_id":2829,"away_team":"FC Barcelona","away_team_id":2817},
+        {"id":"ll2","home_team":"Atletico Madrid","home_team_id":2836,"away_team":"Sevilla","away_team_id":2833},
+    ],
+    "SerieA": [
+        {"id":"sa1","home_team":"Inter Milan","home_team_id":2697,"away_team":"AC Milan","away_team_id":2692},
+        {"id":"sa2","home_team":"Juventus","home_team_id":2699,"away_team":"Napoli","away_team_id":2714},
+    ],
+    "Bundesliga": [
+        {"id":"bl1","home_team":"Bayern Munich","home_team_id":2672,"away_team":"Borussia Dortmund","away_team_id":2673},
+        {"id":"bl2","home_team":"Bayer Leverkusen","home_team_id":2681,"away_team":"RB Leipzig","away_team_id":35975},
+    ],
+    "Ligue1": [
+        {"id":"l1","home_team":"PSG","home_team_id":1644,"away_team":"Olympique Marseille","away_team_id":1641},
+        {"id":"l2","home_team":"AS Monaco","home_team_id":1638,"away_team":"Lyon","away_team_id":1643},
+    ],
+    "CroatiaHNL": [
+        {"id":"cr1","home_team":"Dinamo Zagreb","home_team_id":1674,"away_team":"Hajduk Split","away_team_id":1681},
+    ],
+    "SerbiaSuper": [
+        {"id":"sr1","home_team":"Red Star Belgrade","home_team_id":2482,"away_team":"Partizan","away_team_id":2483},
+    ],
+    "UruguayPrimera": [
+        {"id":"uy1","home_team":"Peñarol","home_team_id":2595,"away_team":"Nacional","away_team_id":2596},
+    ],
+}
 
-
-# ── Mock data ─────────────────────────────────────────────────────────────
-
-def _mock_matches(league_name: str = None) -> list:
-    today = date.today().isoformat()
-    all_m = [m for m in _get_hardcoded_fixtures() if m["date"][:10] >= today]
-    if not all_m:
-        all_m = _get_hardcoded_fixtures()
-    if league_name:
-        return [m for m in all_m if m["league"] == league_name]
-    return all_m
-
-
-def _get_hardcoded_fixtures() -> list:
-    return [
-        {"id":"p27_01","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"NK Maribor","home_team_id":1601,"away_team":"NS Mura","away_team_id":1600,"venue":"Ljudski vrt"},
-        {"id":"p27_02","date":"2026-03-14T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"NK Primorje Ajdovščina","home_team_id":99991,"away_team":"NK Celje","away_team_id":1594,"venue":"Ajdovščina"},
-        {"id":"p27_03","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"FC Koper","home_team_id":2279,"away_team":"NK Olimpija Ljubljana","away_team_id":1598,"venue":"Bonifika"},
-        {"id":"p27_04","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"NK Bravo","home_team_id":10203,"away_team":"NK Aluminij","away_team_id":10576,"venue":"ZAK"},
-        {"id":"p27_05","date":"2026-03-15T17:30:00+01:00","status":"NS","league":"PrvaLiga","league_id":118593,"round":"Round 27","home_team":"ND Gorica","home_team_id":99993,"away_team":"NK Radomlje","away_team_id":14370,"venue":"Nova Gorica"},
-    ]
-
-
-_TEAM_FORM_DATA = {
-    1598: {"form":["W","W","D","W","W","W","D"],"sc":[3,2,1,2,3,1,2],"cc":[0,1,1,0,1,0,1]},
-    1601: {"form":["W","D","W","L","W","W","W"],"sc":[2,1,2,0,1,2,2],"cc":[0,1,0,2,0,1,1]},
-    1594: {"form":["W","W","W","D","L","W","W"],"sc":[2,3,1,1,0,2,1],"cc":[0,0,0,1,1,1,0]},
-    2279: {"form":["W","D","L","W","W","D","W"],"sc":[1,1,0,2,2,1,1],"cc":[0,1,2,0,1,1,0]},
-    10203:{"form":["D","W","L","D","W","W","L"],"sc":[1,2,0,1,2,1,1],"cc":[1,0,1,1,0,2,2]},
-    10576:{"form":["W","L","D","W","L","W","D"],"sc":[1,0,1,2,0,1,1],"cc":[0,2,1,1,2,0,1]},
-    1600: {"form":["L","D","W","L","D","W","L"],"sc":[0,1,2,1,0,1,0],"cc":[1,1,0,2,1,0,2]},
-    14370:{"form":["L","L","D","W","L","D","L"],"sc":[0,1,1,2,0,0,1],"cc":[2,3,1,1,2,1,2]},
-    99991:{"form":["D","W","L","D","W","L","D"],"sc":[1,2,0,1,1,0,0],"cc":[1,0,2,1,0,2,1]},
-    99993:{"form":["L","D","W","L","L","W","D"],"sc":[0,1,1,0,1,2,1],"cc":[2,1,0,2,2,0,1]},
-    14372:{"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},
+_MOCK_FORM_DATA: dict[int, dict] = {
+    1598:  {"form":["W","W","D","W","W","W","D"],"sc":[3,2,1,2,3,1,2],"cc":[0,1,1,0,1,0,1]},
+    1601:  {"form":["W","D","W","L","W","W","W"],"sc":[2,1,2,0,1,2,2],"cc":[0,1,0,2,0,1,1]},
+    1594:  {"form":["W","W","W","D","L","W","W"],"sc":[2,3,1,1,0,2,1],"cc":[0,0,0,1,1,1,0]},
+    2279:  {"form":["W","D","L","W","W","D","W"],"sc":[1,1,0,2,2,1,1],"cc":[0,1,2,0,1,1,0]},
+    10203: {"form":["D","W","L","D","W","W","L"],"sc":[1,2,0,1,2,1,1],"cc":[1,0,1,1,0,2,2]},
+    10576: {"form":["W","L","D","W","L","W","D"],"sc":[1,0,1,2,0,1,1],"cc":[0,2,1,1,2,0,1]},
+    1600:  {"form":["L","D","W","L","D","W","L"],"sc":[0,1,2,1,0,1,0],"cc":[1,1,0,2,1,0,2]},
+    14370: {"form":["L","L","D","W","L","D","L"],"sc":[0,1,1,2,0,0,1],"cc":[2,3,1,1,2,1,2]},
+    14372: {"form":["W","W","D","L","W","D","W"],"sc":[2,1,1,0,2,1,1],"cc":[0,0,1,1,0,1,0]},
+    88008: {"form":["W","W","W","D","W","L","W"],"sc":[2,2,3,1,2,0,1],"cc":[0,1,0,1,0,2,0]},
+    2829:  {"form":["W","W","W","D","W","W","L"],"sc":[3,2,3,1,2,2,1],"cc":[0,1,0,1,0,1,2]},
+    2817:  {"form":["W","D","W","W","L","W","W"],"sc":[3,1,2,2,1,3,2],"cc":[0,1,0,1,2,0,1]},
+    2697:  {"form":["W","W","W","W","D","W","W"],"sc":[2,3,2,3,1,2,2],"cc":[0,0,1,0,1,0,1]},
+    2699:  {"form":["W","D","W","L","W","W","D"],"sc":[2,1,2,0,2,1,1],"cc":[0,1,0,2,0,1,1]},
+    2672:  {"form":["W","W","D","W","W","L","W"],"sc":[4,3,1,2,3,1,2],"cc":[0,0,1,0,0,2,1]},
+    2673:  {"form":["D","W","L","W","W","D","L"],"sc":[1,2,0,2,1,1,0],"cc":[1,1,2,0,1,1,2]},
+    19:    {"form":["W","W","D","W","W","L","W"],"sc":[2,3,1,2,2,0,2],"cc":[0,0,1,0,1,2,1]},
+    44:    {"form":["W","W","W","D","W","W","D"],"sc":[3,2,2,1,3,2,1],"cc":[0,0,1,1,0,0,1]},
+    1644:  {"form":["W","W","W","D","W","W","W"],"sc":[3,4,2,1,3,2,3],"cc":[0,1,0,1,0,0,1]},
+    1674:  {"form":["W","W","D","W","L","W","W"],"sc":[2,3,1,2,0,3,2],"cc":[0,0,1,0,2,1,0]},
+    2482:  {"form":["W","W","W","D","W","L","W"],"sc":[3,2,2,1,2,0,2],"cc":[0,1,0,1,0,2,1]},
+    2595:  {"form":["W","D","W","W","L","W","D"],"sc":[2,1,2,3,0,2,1],"cc":[0,1,0,0,2,0,1]},
+    26124: {"form":["W","W","D","L","W","W","D"],"sc":[2,3,1,0,2,1,1],"cc":[0,0,1,2,1,0,1]},
+    26195: {"form":["W","W","W","D","W","L","W"],"sc":[3,2,2,1,3,0,2],"cc":[0,1,0,1,0,2,1]},
 }
 
 
-def _mock_form(team_id: int = 0, team_name: str = "") -> dict:
-    data = _TEAM_FORM_DATA.get(team_id)
-    if data:
-        r, sc, cc = data["form"], data["sc"], data["cc"]
-    else:
+def _mock_form(team_id: int = 0) -> dict:
+    data = _MOCK_FORM_DATA.get(team_id)
+    if not data:
         seed = team_id % 7
-        pools = [["W","W","W","D","W","L","W"],["W","D","W","W","L","W","D"],
-                 ["D","W","L","W","W","D","W"],["L","W","D","L","W","W","W"],
-                 ["W","L","W","D","L","W","D"],["D","D","W","L","D","W","L"],
-                 ["L","W","L","W","D","L","W"]]
-        sc = ([2,1,3,1,2,0,2][seed:]+[2,1,3,1,2,0,2][:seed])[:7]
-        cc = ([0,1,1,2,1,2,1][seed:]+[0,1,1,2,1,2,1][:seed])[:7]
+        pools = [
+            ["W","W","W","D","W","L","W"],["W","D","W","W","L","W","D"],
+            ["D","W","L","W","W","D","W"],["L","W","D","L","W","W","W"],
+            ["W","L","W","D","L","W","D"],["D","D","W","L","D","W","L"],
+            ["L","W","L","W","D","L","W"],
+        ]
         r  = pools[seed]
+        sc = ([2,1,3,1,2,0,2][seed:] + [2,1,3,1,2,0,2][:seed])[:7]
+        cc = ([0,1,1,2,1,2,1][seed:] + [0,1,1,2,1,2,1][:seed])[:7]
+        data = {"form": r, "sc": sc, "cc": cc}
+
+    r, sc, cc = data["form"], data.get("sc", [1]*7), data.get("cc", [1]*7)
     n = len(r)
-    # Don't generate fake recent_matches for unknown teams — return empty
-    tname = team_name or ID_TO_NAME.get(team_id, "")
-    recent = []
-    if tname:
-        teams = ["NK Olimpija Ljubljana","NK Maribor","NK Celje","FC Koper","NK Bravo",
-                 "NS Mura","NK Aluminij","NK Radomlje","NK Primorje Ajdovščina","ND Gorica"]
-        for i, (res, tg, og) in enumerate(zip(r, sc, cc)):
-            opp = teams[(team_id + i) % len(teams)]
-            ih  = i % 2 == 0
-            dt  = (date.today() - timedelta(days=(n-i)*7)).strftime("%d/%m")
-            recent.append({
-                "home": tname if ih else opp, "away": opp if ih else tname,
-                "score": f"{tg}-{og}" if ih else f"{og}-{tg}",
-                "date": dt, "result": res, "is_home": ih, "opponent": opp,
-                "goals_for": tg, "goals_against": og,
-            })
+    recent = [
+        {"home": "—", "away": "—",
+         "score": f"{sc[i] if i<len(sc) else 1}-{cc[i] if i<len(cc) else 1}",
+         "date": "—", "result": res}
+        for i, res in enumerate(r)
+    ]
     return {
-        "form": r, "form_string": "".join(r[-5:]),
-        "avg_scored": round(sum(sc)/n,2), "avg_conceded": round(sum(cc)/n,2),
-        "clean_sheets": sum(1 for g in cc if g==0),
-        "btts_count": sum(1 for s,c in zip(sc,cc) if s>0 and c>0),
-        "games_analyzed": n, "recent_matches": recent,
+        "form":           r,
+        "form_string":    "".join(r[:5]),
+        "avg_scored":     round(sum(sc) / n, 2),
+        "avg_conceded":   round(sum(cc) / n, 2),
+        "clean_sheets":   sum(1 for g in cc if g == 0),
+        "btts_count":     sum(1 for s, c in zip(sc, cc) if s > 0 and c > 0),
+        "games_analyzed": n,
+        "recent_matches": recent,
     }
 
 
 def _mock_h2h() -> dict:
-    return {"total_matches":8,"home_wins":4,"draws":2,"away_wins":2,
-            "avg_goals_h2h":2.4,"btts_pct":62.5,"over25_pct":50.0,"recent":[]}
+    return {
+        "total_matches": 0, "home_wins": 0, "draws": 0, "away_wins": 0,
+        "avg_goals_h2h": 0.0, "btts_pct": 0.0, "over25_pct": 0.0, "recent": [],
+    }
 
 
-def _mock_standings() -> list:
-    teams=[("NK Olimpija Ljubljana",1598,52),("NK Celje",1594,45),
-           ("NK Maribor",1601,42),("FC Koper",2279,38),("NK Bravo",10203,30),
-           ("NK Aluminij",10576,27),("NS Mura",1600,24),("NK Radomlje",14370,18),
-           ("NK Primorje Ajdovščina",99991,15),("ND Gorica",99993,10)]
-    return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":25,
-             "won":t[2]//3,"drawn":t[2]%3,"lost":25-t[2]//3-t[2]%3,
-             "goals_for":45-i*4,"goals_against":15+i*4,"goal_diff":30-i*8,
-             "form":"WWDWW" if i<3 else "WDLLL"} for i,t in enumerate(teams)]
+def _mock_standings(league: str = "PrvaLiga") -> list[dict]:
+    _data = {
+        "PrvaLiga": [
+            ("NK Olimpija Ljubljana",1598,52),("NK Celje",1594,45),("NK Maribor",1601,42),
+            ("FC Koper",2279,38),("NK Bravo",10203,30),("NK Aluminij",10576,27),
+            ("NS Mura",1600,24),("NK Radomlje",14370,18),
+        ],
+        "2SNL": [
+            ("NK Nafta 1903",14372,48),("NK Krka",88008,44),
+            ("NK Triglav",88004,40),("ND Slovan Ljubljana",99996,37),
+        ],
+        "PrimeraDivision": [
+            ("Boca Juniors",26124,55),("River Plate",26195,52),
+            ("Racing Club",26185,48),("Independiente",26153,44),
+        ],
+        "ChampionsLeague": [
+            ("Real Madrid",2829,18),("Bayern Munich",2672,15),
+            ("Manchester City",17586,15),("PSG",1644,13),
+        ],
+        "PremierLeague": [
+            ("Liverpool",44,65),("Arsenal",19,58),
+            ("Chelsea",38,52),("Manchester City",17586,50),
+        ],
+        "LaLiga": [
+            ("FC Barcelona",2817,60),("Real Madrid",2829,57),
+            ("Atletico Madrid",2836,52),("Athletic Bilbao",2825,48),
+        ],
+        "SerieA": [
+            ("Napoli",2714,55),("Inter Milan",2697,54),
+            ("Juventus",2699,50),("AC Milan",2692,47),
+        ],
+        "Bundesliga": [
+            ("Bayern Munich",2672,58),("Bayer Leverkusen",2681,52),
+            ("RB Leipzig",35975,46),("Borussia Dortmund",2673,43),
+        ],
+        "Ligue1": [
+            ("PSG",1644,62),("AS Monaco",1638,52),
+            ("Lyon",1643,46),("Olympique Marseille",1641,44),
+        ],
+        "CroatiaHNL": [
+            ("Dinamo Zagreb",1674,55),("Hajduk Split",1681,48),
+        ],
+        "SerbiaSuper": [
+            ("Red Star Belgrade",2482,58),("Partizan",2483,48),
+        ],
+        "UruguayPrimera": [
+            ("Peñarol",2595,52),("Nacional",2596,48),
+        ],
+    }
+    teams = _data.get(league, _data["PrvaLiga"])
+    return [
+        {
+            "rank": i+1, "team_id": t[1], "team_name": t[0],
+            "points": t[2], "played": 25,
+            "won": t[2]//3, "drawn": t[2]%3, "lost": 25-t[2]//3-t[2]%3,
+            "goals_for": 45-i*4, "goals_against": 15+i*4, "goal_diff": 30-i*8,
+            "form": "WWDWW" if i<3 else ("WDLWL" if i<6 else "LDLLL"),
+        }
+        for i, t in enumerate(teams)
+    ]
 
 
-def _mock_standings_2snl() -> list:
-    teams=[("NK Nafta 1903",14372,48),("NK Krka",88008,44),("NK Triglav",88004,40),
-           ("ND Slovan Ljubljana",99996,37),("Krško Posavje",88006,33),
-           ("ND Beltinci",99997,30),("NK Ankaran",14371,26),("NK Rudar",88002,23)]
-    return [{"rank":i+1,"team_id":t[1],"team_name":t[0],"points":t[2],"played":24,
-             "won":t[2]//3,"drawn":t[2]%3,"lost":24-t[2]//3-t[2]%3,
-             "goals_for":35-i*2,"goals_against":12+i*2,"goal_diff":23-i*4,
-             "form":"WWDWW" if i<4 else "WDLLL"} for i,t in enumerate(teams)]
+def _mock_matches(league: str = None) -> list[dict]:
+    from datetime import date, timedelta
+    leagues = [league] if league else list(_MOCK_FIXTURES.keys())
+    result = []
+    for lg in leagues:
+        for i, m in enumerate(_MOCK_FIXTURES.get(lg, [])):
+            base = date.today() + timedelta(days=i+1)
+            result.append({
+                **m,
+                "match_id":    m["id"],
+                "date":        f"{base.isoformat()}T18:00:00+00:00",
+                "match_date":  f"{base.isoformat()}T18:00:00+00:00",
+                "status":      "notstarted",
+                "league":      lg,
+                "round":       "—",
+                "venue":       "",
+                "_sf_home_id": m["home_team_id"],
+                "_sf_away_id": m["away_team_id"],
+            })
+    return result
