@@ -341,3 +341,40 @@ async def debug_raw_form_all(team_id: int):
             }
         except Exception as ex:
             return {"error": str(ex)}
+
+
+@router.get("/api/debug/form-via-season/{team_id}")
+async def debug_form_via_season(team_id: int, league: str = "PrvaLiga"):
+    """
+    Alternativa: buscar eventos del equipo via temporada en vez de /team/{id}/events
+    Sofascore a veces bloquea el endpoint directo pero no el de temporada
+    """
+    from app.football_api import SF_HEADERS, TOURNAMENT_IDS, _get_season
+    tid = TOURNAMENT_IDS.get(league)
+    if not tid:
+        return {"error": f"unknown league {league}"}
+    sid = await _get_season(tid)
+
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        # Try team-specific events endpoint variants
+        urls_to_try = [
+            f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0",
+            f"https://api.sofascore.com/api/v1/team/{team_id}/events/last/0",
+            f"https://api.sofascore.com/api/v1/team/{team_id}/performance",
+            f"https://api.sofascore.com/api/v1/unique-tournament/{tid}/season/{sid}/team/{team_id}/events/last/0",
+        ]
+        results = {}
+        for url in urls_to_try:
+            try:
+                r = await client.get(url)
+                data = r.json()
+                events = data.get("events", data.get("previousEvents", []))
+                results[url.split("sofascore.com")[-1]] = {
+                    "status": r.status_code,
+                    "events_found": len(events),
+                    "first_status": events[0].get("status",{}).get("type") if events else None,
+                    "first_home": events[0].get("homeTeam",{}).get("name") if events else None,
+                }
+            except Exception as e:
+                results[url.split("sofascore.com")[-1]] = {"error": str(e)}
+        return results
