@@ -728,8 +728,8 @@ async function openMatchModal(idx) {
   catch(e){document.getElementById('modal-body').innerHTML=`<p style="font-family:var(--mono);color:var(--red)">Error: ${e.message}</p>`}
 }
 
-function buildScCard(s, i) {
-  const ex = scExplain(s.l);
+function buildScCard(s, i, ex) {
+  ex = ex || '';
   const pct = Math.min((s.v||0)/s.mx*100, 100).toFixed(0);
   const val = (s.v||0).toFixed(1);
   let html = '<div class="sc sc-btn" onclick="toggleScCard('+i+')">'
@@ -916,7 +916,7 @@ function renderModal(d) {
     <div class="sec">Cuotas ar-1xbet</div>${oddsHTML}
 
     <div class="sec">Score ${bd.overall||0}/100</div>
-    <div class="sgrid">${si.map((s,i)=>buildScCard(s,i)).join("")}</div>
+    <div class="sgrid">${si.map((s,i)=>buildScCard(s,i,scExplain(s.l))).join("")}</div>
 
     <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover en cada letra</span></div>
     <div class="frow">
