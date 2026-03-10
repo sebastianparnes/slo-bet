@@ -127,8 +127,8 @@ async def _fetch_sf_form(team_id: int, last_n: int = 7) -> list[dict]:
             if r.status_code != 200:
                 return []
             events = r.json().get("events", [])
-            # /events/last/0 returns newest first — take last_n most recent
-            return events[:last_n]
+            # /events/last/0 returns oldest first — take last last_n for most recent
+            return events[-last_n:]
         except Exception as e:
             print(f"[SF] form team={team_id}: {e}")
             return []
@@ -266,13 +266,13 @@ def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
     n = len(results)
     return {
         "form":           results,
-        "form_string":    "".join(reversed(results[:5])),  # oldest→newest for display
+        "form_string":    "".join(results),  # oldest→newest, last 5 are most recent
         "avg_scored":     round(sum(scored) / n, 2),
         "avg_conceded":   round(sum(conceded) / n, 2),
         "clean_sheets":   sum(1 for g in conceded if g == 0),
         "btts_count":     sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
         "games_analyzed": n,
-        "recent_matches": recent_matches,  # already newest first (from /events/last/0)
+        "recent_matches": list(reversed(recent_matches)),  # newest first for display
     }
 
 

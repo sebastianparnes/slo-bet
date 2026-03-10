@@ -715,9 +715,12 @@ function renderModal(d) {
 
   function fdClickable(fs,rl){
     const chars=(fs||'?????').split('').filter(c=>'WGDELP'.includes(c));
-    const recent=(rl||[]);  // already newest first
+    // form_string: oldest→newest (left=oldest, right=most recent)
+    // recent_matches: newest→oldest
+    // So chars[i] matches recent[chars.length-1-i]
+    const recent=(rl||[]);
     return chars.map((c,i)=>{
-      const m=recent[i];
+      const m=recent[chars.length-1-i];
       const tip=m?`title="${m.home||''} ${m.score||''} ${m.away||''} · ${m.date||''}"`:'';
       const sty=m?`cursor:help;border-bottom:1.5px dotted ${fcol(c)};padding-bottom:1px;`:'';
       return `<span ${tip} style="color:${fcol(c)};font-weight:700;font-size:15px;${sty}">${flbl(c)}</span>`;
