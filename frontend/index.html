@@ -247,6 +247,7 @@ body{
 .b-high{background:#c0392b33;color:#c0392b}
 .b-conf{background:var(--surf);color:var(--ink);font-weight:500}
 .rreason{font-family:var(--mono);font-size:11px;color:var(--dim);padding:2px 0 2px 14px;position:relative}
+.reg-btn{background:var(--ink);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-family:var(--mono);cursor:pointer;letter-spacing:.05em;transition:opacity .15s}.reg-btn:hover{opacity:.75}
 .rreason::before{content:'›';position:absolute;left:4px;color:var(--green)}
 .btn-log{width:100%;margin-top:10px;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--lime);border:1.5px solid var(--ink);padding:10px;cursor:pointer;transition:all .15s}
 .btn-log:hover,.btn-log:active{background:var(--green);border-color:var(--green);color:#fff}
@@ -578,10 +579,18 @@ Empezá con "📊 Estado completo" para ver si Sofascore y ar-1xbet responden.
         <div class="fg"><label>Fecha</label><input type="date" id="f-date"></div>
         <div class="fg"><label>Tipo</label>
           <select id="f-type" onchange="updateSel()">
-            <option value="1X2">1X2</option>
-            <option value="double_chance">Doble Oportunidad</option>
-            <option value="over_under">Over / Under</option>
-            <option value="btts">Ambos Marcan</option>
+            <option value="1X2">⚽ 1X2</option>
+            <option value="double_chance">🔄 Doble Oportunidad</option>
+            <option value="over_under_15">📊 O/U 1.5 Goles</option>
+            <option value="over_under_25">📊 O/U 2.5 Goles</option>
+            <option value="over_under_35">📊 O/U 3.5 Goles</option>
+            <option value="btts">🥅 Ambos Marcan (BTTS)</option>
+            <option value="btts_ht">⏱ BTTS 1er Tiempo</option>
+            <option value="halftime">1T Resultado 1er Tiempo</option>
+            <option value="asian_handicap">🏹 Handicap Asiático</option>
+            <option value="corners">📐 Corners</option>
+            <option value="cards">🟨 Tarjetas</option>
+            <option value="exact_score">🎯 Resultado Exacto</option>
           </select>
         </div>
         <div class="fg"><label>Selección</label><select id="f-sel"></select></div>
@@ -988,7 +997,13 @@ function renderModal(d) {
             <span class="badge b-conf">${Math.round(r.confidence)}%</span>
           </div>
         </div>
-        <div>${(r.reasoning||[]).map(rs=>`<div class="rreason">· ${rs}</div>`).join('')}</div>`;
+        <div>${(r.reasoning||[]).map(rs=>`<div class="rreason">· ${rs}</div>`).join('')}</div>
+        <div style="margin-top:8px;text-align:right">
+          <button class="reg-btn" onclick="regFromRec(this)" 
+            data-home="${d.home_team}" data-away="${d.away_team}" data-league="${d.league}"
+            data-date="${(d.match_date||'').split('T')[0]}" data-type="${r.bet_type}"
+            data-sel="${r.selection}" data-odd="${r.xbet_odd||r.min_odds||''}">📝 Registrar apuesta</button>
+        </div>`;
     }).join('')}</div>
     ${warns.length?`<div style="margin-top:12px">${warns.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
@@ -1002,6 +1017,14 @@ function renderModal(d) {
 }
 
 /* ── Bet modal ── */
+function regFromRec(btn) {
+  const ds = btn.dataset;
+  const pre = {home:ds.home,away:ds.away,league:ds.league,date:ds.date,
+                type:ds.type,sel:ds.sel,odd:ds.odd?parseFloat(ds.odd):''};
+  closeOv('ov-match');
+  setTimeout(() => openBetModal(pre), 150);
+}
+
 function openBetModal(pre={}) {
   _pre=pre;
   const today=new Date().toISOString().split('T')[0];
@@ -1021,7 +1044,20 @@ function openBetFromMatch(md,rec){
   openBetModal({home:md.home_team,away:md.away_team,league:md.league,date:md.match_date,type:rec.bet_type,sel:rec.selection,odd:rec.xbet_odd,_conf:rec.confidence,_label:rec.label});
 }
 function updateSel(){
-  const opts={'1X2':[['1','1 — Local'],['X','X — Empate'],['2','2 — Visitante']],'double_chance':[['1X','1X — Local o Empate'],['X2','X2 — Visita o Empate'],['12','12 — No empate']],'over_under':[['over_2.5','Over 2.5'],['under_2.5','Under 2.5'],['over_1.5','Over 1.5'],['under_1.5','Under 1.5']],'btts':[['yes','Sí — Ambos marcan'],['no','No']]};
+  const opts={
+    '1X2':[['1','1 — Local gana'],['X','X — Empate'],['2','2 — Visita gana']],
+    'double_chance':[['1X','1X — Local o Empate'],['X2','X2 — Visita o Empate'],['12','12 — No empate']],
+    'over_under_15':[['over_1.5','Over 1.5 goles'],['under_1.5','Under 1.5 goles']],
+    'over_under_25':[['over_2.5','Over 2.5 goles'],['under_2.5','Under 2.5 goles']],
+    'over_under_35':[['over_3.5','Over 3.5 goles'],['under_3.5','Under 3.5 goles']],
+    'btts':[['yes','Sí — Ambos marcan'],['no','No — Al menos uno no marca']],
+    'btts_ht':[['yes_ht','Sí — Ambos marcan en 1T'],['no_ht','No en 1er Tiempo']],
+    'halftime':[['ht_1','Local gana 1er Tiempo'],['ht_X','Empate 1er Tiempo'],['ht_2','Visita gana 1er Tiempo']],
+    'asian_handicap':[['ah_home_-1.5','Local -1.5'],['ah_home_-1.0','Local -1.0'],['ah_home_-0.5','Local -0.5'],['ah_home_0','AH 0 — Local'],['ah_away_0.5','Local +0.5'],['ah_away_1.0','Local +1.0'],['ah_away_1.5','Local +1.5']],
+    'corners':[['corners_over_8.5','Over 8.5 corners'],['corners_under_8.5','Under 8.5 corners'],['corners_over_9.5','Over 9.5 corners'],['corners_under_9.5','Under 9.5 corners'],['corners_over_10.5','Over 10.5 corners'],['corners_under_10.5','Under 10.5 corners']],
+    'cards':[['cards_over_3.5','Over 3.5 tarjetas'],['cards_under_3.5','Under 3.5 tarjetas'],['cards_over_4.5','Over 4.5 tarjetas'],['cards_under_4.5','Under 4.5 tarjetas']],
+    'exact_score':[['score_1-0','1-0'],['score_2-0','2-0'],['score_2-1','2-1'],['score_1-1','1-1'],['score_0-0','0-0'],['score_0-1','0-1'],['score_0-2','0-2'],['score_1-2','1-2'],['score_3-0','3-0'],['score_3-1','3-1']],
+  };
   const t=document.getElementById('f-type').value;
   document.getElementById('f-sel').innerHTML=(opts[t]||[]).map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
 }
