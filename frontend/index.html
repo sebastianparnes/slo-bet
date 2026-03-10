@@ -249,6 +249,29 @@ body{
 .b-high{background:#c0392b33;color:#c0392b}
 .b-conf{background:var(--surf);color:var(--ink);font-weight:500}
 .rreason{font-family:var(--mono);font-size:11px;color:var(--dim);padding:2px 0 2px 14px;position:relative}
+.cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px}
+.cal-card{background:var(--card);border:1.5px solid var(--rule);border-radius:8px;padding:16px}
+.cal-card.good{border-color:var(--green)}
+.cal-card.warn{border-color:#b5860d}
+.cal-metric{font-size:28px;font-weight:700;font-family:var(--mono);margin:4px 0}
+.cal-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.cal-sub{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:2px}
+.cal-bar-wrap{margin-top:6px;height:6px;background:var(--rule);border-radius:3px;overflow:hidden}
+.cal-bar{height:100%;background:var(--green);border-radius:3px;transition:width .4s}
+.cal-bar.warn{background:#b5860d}
+.cal-bar.bad{background:#c0392b}
+.cal-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;margin-top:12px}
+.cal-table th{text-align:left;padding:6px 8px;border-bottom:2px solid var(--rule);color:var(--dim);font-size:9px;text-transform:uppercase}
+.cal-table td{padding:6px 8px;border-bottom:1px solid var(--rule)}
+.cal-table tr:hover td{background:var(--surf)}
+.bucket-chart{display:flex;align-items:flex-end;gap:4px;height:80px;margin-top:12px}
+.bucket-col{display:flex;flex-direction:column;align-items:center;flex:1;gap:2px}
+.bucket-pred{background:var(--rule);width:100%;border-radius:2px 2px 0 0}
+.bucket-real{background:var(--green);width:100%;border-radius:2px 2px 0 0;opacity:.8}
+.bucket-lbl{font-size:8px;font-family:var(--mono);color:var(--dim);text-align:center}
+.btn-run{background:var(--green)!important;color:#fff!important}
+.btn-sm{font-family:var(--mono);font-size:10px;padding:5px 10px;border:1px solid var(--rule);background:var(--card);border-radius:4px;cursor:pointer;letter-spacing:.04em}
+.btn-sm:hover{background:var(--surf)}
 .reg-btn{background:#1a1a1a;color:#e8f5e2;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-family:var(--mono);cursor:pointer;letter-spacing:.05em;transition:background .15s;font-weight:600}.reg-btn:hover{background:#333}
 .rreason::before{content:'›';position:absolute;left:4px;color:var(--green)}
 .btn-log{width:100%;margin-top:10px;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--lime);border:1.5px solid var(--ink);padding:10px;cursor:pointer;transition:all .15s}
@@ -383,6 +406,7 @@ select option{background:var(--card)}
     <nav class="desk-nav">
       <button class="nb on" data-page="matches">⚽ Partidos</button>
       <button class="nb" data-page="history">◎ Historial</button>
+        <button class="nb" data-page="calibration">📊 Calibración</button>
         <button class="nb" data-page="debug">🔧 Debug</button>
     </nav>
     <div class="ticker"><div class="tdot"></div>1xbet LIVE</div>
@@ -524,6 +548,35 @@ select option{background:var(--card)}
 </div><!-- /wrap -->
 
 <!-- MATCH MODAL -->
+  <!-- ── CALIBRATION PAGE ── -->
+  <div id="page-calibration" class="page">
+    <div class="pg-head">
+      <h1 class="pg-title">CALIBRACIÓN <em>DEL MODELO</em></h1>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="cal-league-sel" style="font-family:var(--mono);font-size:11px;padding:4px 8px;border:1px solid var(--rule);background:var(--card);border-radius:4px">
+          <option value="">Todas las ligas</option>
+          <option value="PrvaLiga">PrvaLiga 🇸🇮</option>
+          <option value="2SNL">2.SNL 🇸🇮</option>
+          <option value="PrimeraDivision">Primera Div. 🇦🇷</option>
+          <option value="PrimeraNacional">Primera Nac. 🇦🇷</option>
+          <option value="ChampionsLeague">Champions 🏆</option>
+          <option value="PremierLeague">Premier League 🏴󠁧󠁢󠁥󠁮󠁧󠁿</option>
+          <option value="LaLiga">La Liga 🇪🇸</option>
+          <option value="SerieA">Serie A 🇮🇹</option>
+          <option value="Bundesliga">Bundesliga 🇩🇪</option>
+          <option value="Ligue1">Ligue 1 🇫🇷</option>
+          <option value="CroatiaHNL">Croatia HNL 🇭🇷</option>
+          <option value="SerbiaSuper">Serbia Super 🇷🇸</option>
+          <option value="UruguayPrimera">Uruguay 🇺🇾</option>
+        </select>
+        <button class="btn-sm" onclick="loadCalibration()">↻ Actualizar métricas</button>
+        <button class="btn-sm btn-run" onclick="runCalibration()">▶ Correr calibración</button>
+      </div>
+    </div>
+    <div id="cal-status-bar" style="display:none;background:var(--surf);padding:8px 14px;font-family:var(--mono);font-size:11px;margin-bottom:12px;border-radius:6px;color:var(--dim)"></div>
+    <div id="cal-body"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <!-- ── DEBUG PAGE ── -->
   <div id="page-debug" class="page">
     <div class="pg-head">
@@ -1288,6 +1341,235 @@ async function dbRun(endpoint) {
 loadMatches();
 // Poll for results every 15 min if page is open
 setInterval(()=>{if(document.getElementById('page-history').classList.contains('on'))triggerPoll()}, 15*60*1000);
+
+
+/* ════════════════════════════════════════════════════
+   CALIBRATION
+   ════════════════════════════════════════════════════ */
+let _calPollTimer = null;
+
+async function runCalibration() {
+  const btn = document.querySelector('.btn-run');
+  btn.textContent = '⏳ Iniciando...';
+  btn.disabled = true;
+  const pages = 3;
+  try {
+    const r = await fetch('/calibration/run?pages=' + pages);
+    const d = await r.json();
+    const bar = document.getElementById('cal-status-bar');
+    bar.style.display = 'block';
+    bar.textContent = '▶ ' + (d.message || 'Calibración iniciada') +
+      ' (~' + (d.estimated_matches||'?') + ' partidos a procesar)';
+    pollCalStatus();
+  } catch(e) {
+    alert('Error: ' + e);
+  } finally {
+    btn.textContent = '▶ Correr calibración';
+    btn.disabled = false;
+  }
+}
+
+async function pollCalStatus() {
+  if (_calPollTimer) clearInterval(_calPollTimer);
+  _calPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/calibration/status');
+      const d = await r.json();
+      const bar = document.getElementById('cal-status-bar');
+      bar.style.display = 'block';
+      bar.textContent = (d.running ? '⏳ Calibrando...' : '✓ Listo') +
+        '  |  ' + d.total_records + ' partidos en base de datos';
+      if (!d.running) {
+        clearInterval(_calPollTimer);
+        loadCalibration();
+      }
+    } catch(e) {}
+  }, 4000);
+}
+
+async function loadCalibration() {
+  const body = document.getElementById('cal-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const league = document.getElementById('cal-league-sel').value;
+  const url = '/calibration/metrics' + (league ? '?league=' + league : '');
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    body.innerHTML = renderCalibration(d);
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;font-family:var(--mono);color:var(--dim)">Error cargando métricas: ' + e + '</div>';
+  }
+}
+
+function accColor(pct) {
+  if (pct >= 60) return 'good';
+  if (pct >= 50) return 'warn';
+  return '';
+}
+function accBar(pct) {
+  const color = pct >= 60 ? '' : pct >= 50 ? 'warn' : 'bad';
+  return '<div class="cal-bar-wrap"><div class="cal-bar ' + color + '" style="width:' + Math.min(pct,100) + '%"></div></div>';
+}
+function bsColor(bs) {
+  // Brier score: 0=perfect, 0.25=random. <0.20 good, <0.23 ok, else bad
+  if (bs < 0.20) return 'good';
+  if (bs < 0.23) return 'warn';
+  return '';
+}
+
+function renderCalibration(d) {
+  if (!d || d.total === 0 || d.message) {
+    return '<div style="padding:32px;text-align:center;font-family:var(--mono);color:var(--dim)">' +
+      '<div style="font-size:32px;margin-bottom:12px">📊</div>' +
+      '<div style="font-size:14px;margin-bottom:8px">' + (d.message || 'Sin datos aún') + '</div>' +
+      '<div style="font-size:11px">Hacé clic en <b>▶ Correr calibración</b> para empezar.<br>' +
+      'Se va a descargar el historial de partidos recientes de Sofascore<br>y comparar con las predicciones del modelo.</div></div>';
+  }
+
+  const acc = d.accuracy || {};
+  const real = d.real_rates || {};
+  const pred = d.model_avg_predictions || {};
+  const bs = d.brier_scores || {};
+  const goals = d.avg_goals || {};
+
+  // ── Summary header
+  let html = '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px">' +
+    '<b>' + d.total + ' partidos analizados</b>' +
+    (d.error ? ' · <span style="color:#c0392b">Error: ' + d.error + '</span>' : '') +
+    '</div>';
+
+  // ── Main accuracy cards
+  html += '<div class="cal-grid">';
+
+  const markets = [
+    { key:'1x2',     label:'1X2 (quién gana)',   icon:'⚽', ref:'~52-55% pro' },
+    { key:'over_25', label:'Over/Under 2.5',      icon:'📊', ref:'~58-62% pro' },
+    { key:'btts',    label:'BTTS',                icon:'🥅', ref:'~57-60% pro' },
+    { key:'over_15', label:'Over/Under 1.5',      icon:'📊', ref:'referencia' },
+    { key:'over_35', label:'Over/Under 3.5',      icon:'📊', ref:'referencia' },
+  ];
+
+  for (const m of markets) {
+    const v = acc[m.key] || 0;
+    const cls = accColor(v);
+    html += '<div class="cal-card ' + cls + '">' +
+      '<div class="cal-label">' + m.icon + ' ' + m.label + '</div>' +
+      '<div class="cal-metric">' + v + '%</div>' +
+      accBar(v) +
+      '<div class="cal-sub">' + m.ref + '</div>' +
+      '</div>';
+  }
+
+  // Brier scores
+  const bsMarkets = [
+    { key:'home_win', label:'Brier Score — Local gana' },
+    { key:'over_25',  label:'Brier Score — Over 2.5' },
+    { key:'btts',     label:'Brier Score — BTTS' },
+  ];
+  for (const b of bsMarkets) {
+    const v = bs[b.key] || 0.25;
+    const cls = bsColor(v);
+    html += '<div class="cal-card ' + cls + '">' +
+      '<div class="cal-label">' + b.label + '</div>' +
+      '<div class="cal-metric" style="font-size:22px">' + v + '</div>' +
+      '<div class="cal-sub">0=perfecto · 0.25=azar · <0.20=bueno</div>' +
+      '</div>';
+  }
+  html += '</div>';
+
+  // ── Model vs Reality comparison
+  html += '<div class="sec">Modelo vs Realidad — ¿Está bien calibrado?</div>';
+  html += '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px">' +
+    'Si el modelo es perfecto, sus predicciones promedio deberían coincidir con las tasas reales.</div>';
+  html += '<table class="cal-table"><thead><tr>' +
+    '<th>Mercado</th><th>Modelo predice</th><th>Ocurrió en realidad</th><th>Sesgo</th></tr></thead><tbody>';
+
+  const compareRows = [
+    { label:'Local gana',  mp: pred.home_win || 0, rr: real.home_win || 0 },
+    { label:'Empate',      mp: pred.draw      || 0, rr: real.draw     || 0 },
+    { label:'Visita gana', mp: pred.away_win  || 0, rr: real.away_win || 0 },
+    { label:'Over 2.5',    mp: pred.over_25   || 0, rr: real.over_25  || 0 },
+    { label:'BTTS',        mp: pred.btts      || 0, rr: real.btts     || 0 },
+  ];
+  for (const row of compareRows) {
+    const bias = round1(row.mp - row.rr);
+    const biasColor = Math.abs(bias) < 3 ? 'var(--green)' : Math.abs(bias) < 7 ? '#b5860d' : '#c0392b';
+    const biasStr = (bias > 0 ? '+' : '') + bias + '%';
+    html += '<tr><td>' + row.label + '</td>' +
+      '<td><b>' + row.mp + '%</b></td>' +
+      '<td>' + row.rr + '%</td>' +
+      '<td style="color:' + biasColor + '">' + biasStr + '</td></tr>';
+  }
+
+  // Goals
+  html += '<tr><td>Goles promedio</td>' +
+    '<td><b>' + (goals.model_xg || '?') + ' xG</b></td>' +
+    '<td>' + (goals.real || '?') + ' reales</td>' +
+    '<td style="color:var(--dim)">' + round1((goals.model_xg||0)-(goals.real||0)) + '</td></tr>';
+  html += '</tbody></table>';
+
+  // ── Calibration buckets chart (Over 2.5)
+  const buckets = d.calibration_buckets_over25 || [];
+  if (buckets.length > 1) {
+    html += '<div class="sec" style="margin-top:20px">Calibración Over 2.5 — Predicción vs Realidad por rango</div>';
+    html += '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px">' +
+      'Cada columna = partidos donde el modelo predijo ese rango de probabilidad. ' +
+      '<span style="color:var(--green)">Verde</span> = tasa real. ' +
+      'Si las alturas coinciden → el modelo está bien calibrado.</div>';
+    html += '<div class="bucket-chart">';
+    const maxH = 80;
+    for (const b of buckets) {
+      if (!b.count || b.count < 2) continue;
+      const predH = Math.round((b.model_pred / 100) * maxH);
+      const realH = Math.round((b.actual_pct / 100) * maxH);
+      const gap = Math.abs(b.gap);
+      const gapColor = gap < 5 ? 'var(--green)' : gap < 12 ? '#b5860d' : '#c0392b';
+      html += '<div class="bucket-col">' +
+        '<div style="font-size:8px;font-family:var(--mono);color:' + gapColor + ';margin-bottom:2px">' +
+          (b.gap > 0 ? '↑' : '↓') + gap + '%</div>' +
+        '<div class="bucket-pred" style="height:' + predH + 'px" title="Modelo: ' + b.model_pred + '%"></div>' +
+        '<div class="bucket-real" style="height:' + realH + 'px" title="Real: ' + b.actual_pct + '%"></div>' +
+        '<div class="bucket-lbl">' + b.pred_range + '<br>n=' + b.count + '</div>' +
+        '</div>';
+    }
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:4px">' +
+      '■ Gris = predicción modelo  ■ Verde = ocurrió en realidad</div>';
+  }
+
+  // ── Per-league table
+  const byLeague = d.by_league || [];
+  if (byLeague.length > 0) {
+    html += '<div class="sec" style="margin-top:20px">Precisión por Liga</div>';
+    html += '<table class="cal-table"><thead><tr>' +
+      '<th>Liga</th><th>Partidos</th><th>1X2 %</th><th>O/U 2.5 %</th><th>BTTS %</th><th>Goles/p</th>' +
+      '</tr></thead><tbody>';
+    for (const l of byLeague) {
+      const best = Math.max(l.acc_1x2, l.acc_over25, l.acc_btts);
+      html += '<tr>' +
+        '<td><b>' + l.league + '</b></td>' +
+        '<td>' + l.total + '</td>' +
+        '<td style="color:' + (l.acc_1x2===best?'var(--green)':'inherit') + '">' + round1(l.acc_1x2) + '%</td>' +
+        '<td style="color:' + (l.acc_over25===best?'var(--green)':'inherit') + '">' + round1(l.acc_over25) + '%</td>' +
+        '<td style="color:' + (l.acc_btts===best?'var(--green)':'inherit') + '">' + round1(l.acc_btts) + '%</td>' +
+        '<td>' + l.avg_goals + '</td>' +
+        '</tr>';
+    }
+    html += '</tbody></table>';
+  }
+
+  html += '<div style="margin-top:24px;padding:12px;background:var(--surf);border-radius:6px;font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.7">' +
+    '<b>Cómo leer esto:</b><br>' +
+    '· <b>Precisión 1X2</b>: un modelo bueno llega a ~52-55%. Bookmakers profesionales están en ~55-57%.<br>' +
+    '· <b>Brier Score</b>: mide qué tan bien calibradas están las probabilidades. Menos es mejor.<br>' +
+    '· <b>Sesgo</b>: si el modelo dice "50% local gana" pero pasa en 40% de los casos, está sobreestimando.<br>' +
+    '· <b>Calibración O/U</b>: si cuando el modelo dice 70%, el resultado pasa en 70% de los casos → perfecto.' +
+    '</div>';
+
+  return html;
+}
+
+function round1(v) { return Math.round((v||0)*10)/10; }
 </script>
 </body>
 </html>

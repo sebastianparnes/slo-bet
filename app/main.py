@@ -9,9 +9,12 @@ from app.routes import matches, history, analysis
 from app.routes import debug as debug_router
 from app.routes import arg_matches
 from app.result_poller import start_poller
+from app.calibration_routes import router as calibration_router
+from app.calibration import init_calibration_table
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_calibration_table()
     task = asyncio.create_task(start_poller())
     yield
     task.cancel()
@@ -30,6 +33,7 @@ app.include_router(debug_router.router, tags=["Debug"])
 
 # ARG
 app.include_router(arg_matches.router,  prefix="/api/arg/matches", tags=["ARG"])
+app.include_router(calibration_router,  prefix="",                  tags=["Calibration"])
 app.include_router(history.router,      prefix="/api/arg/history", tags=["ARG"])
 
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
