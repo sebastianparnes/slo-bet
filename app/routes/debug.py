@@ -289,3 +289,35 @@ async def debug_pipeline_test(league: str = "PrvaLiga"):
 
     result["overall_status"] = "✓ REAL" if home_form.get("games_analyzed", 0) > 0 else "⚠ MOCK (SF blocking form)"
     return result
+
+
+@router.get("/api/debug/raw-form/{team_id}")
+async def debug_raw_form(team_id: int):
+    """Ver estructura RAW del primer evento de forma de un equipo (ID real de SF)"""
+    from app.football_api import SF_HEADERS
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0")
+            data = r.json()
+            events = data.get("events", [])
+            finished = [e for e in events if (e.get("status") or {}).get("type") == "finished"]
+            if not finished:
+                return {"team_id": team_id, "total": len(events),
+                        "statuses": list({e.get("status",{}).get("type") for e in events}),
+                        "note": "no finished events"}
+            e = finished[0]
+            return {
+                "team_id": team_id,
+                "total_events": len(events),
+                "finished_count": len(finished),
+                "first_finished": {
+                    "status": e.get("status", {}).get("type"),
+                    "homeTeam": e.get("homeTeam", {}),
+                    "awayTeam": e.get("awayTeam", {}),
+                    "homeScore": e.get("homeScore", {}),
+                    "awayScore": e.get("awayScore", {}),
+                    "all_keys": list(e.keys()),
+                }
+            }
+        except Exception as ex:
+            return {"error": str(ex)}
