@@ -42,6 +42,7 @@ SF_HEADERS = {
 _season_cache: dict[int, int] = {}
 _fixture_cache: dict[str, tuple[float, list]] = {}
 _h2h_event_cache: dict[tuple, int] = {}  # (home_id, away_id) -> sf_event_id
+_h2h_duel_cache: dict[tuple, dict] = {}  # (home_id, away_id) -> teamDuel stats
 FIXTURE_CACHE_TTL = 300  # 5 min
 
 
@@ -162,7 +163,15 @@ async def _fetch_sf_h2h(home_id: int, away_id: int) -> list[dict]:
             if r.status_code != 200:
                 return []
             data = r.json()
-            return data.get("previousEvents", data.get("events", []))
+            events = data.get("previousEvents", data.get("events", []))
+            if events:
+                return events
+            # Sofascore sometimes returns teamDuel stats instead of event list
+            # Store teamDuel in a side-cache for the analysis engine
+            td = data.get("teamDuel")
+            if td:
+                _h2h_duel_cache[(home_id, away_id)] = td
+            return []
         except Exception as e:
             print(f"[SF] h2h {home_id} vs {away_id}: {e}")
             return []
@@ -410,7 +419,14 @@ async def fetch_h2h(home_id: int, away_id: int) -> dict:
     if not home_id or not away_id:
         return _mock_h2h()
     events = await _fetch_sf_h2h(home_id, away_id)
-    return _parse_h2h_events(events, "")
+    if events:
+        return _parse_h2h_events(events, "")
+    # Fallback: use teamDuel stats if available
+    td = (_h2h_duel_cache.get((home_id, away_id))
+          or _h2h_duel_cache.get((away_id, home_id)))
+    if td:
+        return _parse_team_duel(td)
+    return _mock_h2h()
 
 
 async def fetch_standings(league_id_or_name) -> list[dict]:
@@ -542,6 +558,34 @@ def _mock_form(team_id: int = 0) -> dict:
         "btts_count":     sum(1 for s, c in zip(sc, cc) if s > 0 and c > 0),
         "games_analyzed": n,
         "recent_matches": recent,
+    }
+
+
+def _parse_team_duel(td: dict) -> dict:
+    """Parse Sofascore teamDuel stats into our H2H format."""
+    # teamDuel has: homeWins, awayWins, draws, homeGoals, awayGoals etc.
+    hw    = td.get("homeWins", 0)
+    aw    = td.get("awayWins", 0)
+    draws = td.get("draws", 0)
+    n     = hw + aw + draws
+    if n == 0:
+        return _mock_h2h()
+    hg = td.get("homeGoals", 0)
+    ag = td.get("awayGoals", 0)
+    total_goals = hg + ag
+    avg_goals = round(total_goals / n, 2) if n else 0.0
+    # btts and over25 not directly available — estimate from avg goals
+    btts_pct  = round(min(avg_goals / 4 * 100, 75), 1)
+    over25_pct = round(min(avg_goals / 3.5 * 100, 80), 1)
+    return {
+        "total_matches":  n,
+        "home_wins":      hw,
+        "draws":          draws,
+        "away_wins":      aw,
+        "avg_goals_h2h":  avg_goals,
+        "btts_pct":       btts_pct,
+        "over25_pct":     over25_pct,
+        "recent":         [],  # no individual events available via teamDuel
     }
 
 

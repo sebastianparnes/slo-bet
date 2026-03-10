@@ -405,6 +405,7 @@ async def debug_h2h_test(home_id: int, away_id: int):
             result["h2h_status"] = r.status_code
             result["h2h_events"] = len(events)
             result["h2h_keys"] = list(data.keys())
+            result["team_duel"] = data.get("teamDuel", {})
             result["sample"] = [{"home": e.get("homeTeam",{}).get("name"), "away": e.get("awayTeam",{}).get("name"), "score": f'{e.get("homeScore",{}).get("current","?")}-{e.get("awayScore",{}).get("current","?")}' } for e in events[:3]]
         else:
             result["error"] = "No event_id found — fixture not in cache yet"
