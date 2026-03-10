@@ -321,3 +321,23 @@ async def debug_raw_form(team_id: int):
             }
         except Exception as ex:
             return {"error": str(ex)}
+
+
+@router.get("/api/debug/raw-form-all/{team_id}")
+async def debug_raw_form_all(team_id: int):
+    """Ver TODOS los eventos de forma sin filtrar por status"""
+    from app.football_api import SF_HEADERS
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0")
+            data = r.json()
+            events = data.get("events", [])
+            return {
+                "team_id": team_id,
+                "http_status": r.status_code,
+                "total_events": len(events),
+                "statuses": list({e.get("status",{}).get("type","?") for e in events}),
+                "first_event_full": events[0] if events else None,
+            }
+        except Exception as ex:
+            return {"error": str(ex)}
