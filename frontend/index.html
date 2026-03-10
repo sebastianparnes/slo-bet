@@ -522,8 +522,9 @@ select option{background:var(--card)}
       <button class="pill" onclick="dbRun('odds/PrvaLiga')">💰 Odds PrvaLiga</button>
       <button class="pill" onclick="dbRun('odds/PrimeraDivision')">💰 Odds Primera</button>
       <button class="pill" onclick="dbRun('analysis-sample?league=PrvaLiga')">🧪 Análisis PrvaLiga</button>
-      <button class="pill" onclick="dbRun('raw-team/1601')">🔬 Raw NK Maribor</button>
-      <button class="pill" onclick="dbRun('raw-team/1598')">🔬 Raw NK Olimpija</button>
+      <button class="pill" onclick="dbRun('real-team-ids')">🔍 IDs reales SF</button>
+      <button class="pill" onclick="dbRun('pipeline-test?league=PrvaLiga')" style="background:var(--green);color:#fff;border-color:var(--green)">🧪 Pipeline test PrvaLiga</button>
+      <button class="pill" onclick="dbRun('pipeline-test?league=PrimeraDivision')">🧪 Pipeline Primera</button>
     </div>
     <div id="db-out" style="font-family:var(--mono);font-size:11px;background:var(--surf);padding:16px;border-radius:4px;white-space:pre-wrap;word-break:break-all;min-height:200px;max-height:70vh;overflow-y:auto;line-height:1.6;border:1px solid var(--rule)">
 Seleccioná un endpoint arriba para ver los datos reales del servidor...
@@ -1095,6 +1096,10 @@ async function dbRun(endpoint) {
       .replace(/"(mock|error|ERROR[^"\n]*|NOT SET[^"\n]*)"/g, '"<b style=\'color:var(--red)\'>$1</b>"')
       .replace(/"(partial|⚠[^"\n]*)"/g, '"<b style=\'color:#b5860d\'>$1</b>"')
       .replace(/("\d+\.\d+")/g, '<span style=\'color:var(--green)\'>$1</span>');
+    // If real-team-ids, make IDs clickable
+    if (endpoint === 'real-team-ids') {
+      out.innerHTML += '<div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--dim)">👆 Copiá un ID y usá: <code>dbRun(\'raw-team/ID\')</code> en consola o editá el botón</div>';
+    }
   } catch(e) {
     out.textContent = 'Error: ' + e.message;
   }

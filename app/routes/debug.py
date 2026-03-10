@@ -186,7 +186,7 @@ async def debug_full():
 
 @router.get("/api/debug/raw-team/{team_id}")
 async def debug_raw_team(team_id: int):
-    """Ver estructura RAW de Sofascore para un equipo — útil para debuggear campos"""
+    """Ver estructura RAW de Sofascore para un equipo"""
     from app.football_api import SF_HEADERS
     async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
         try:
@@ -194,22 +194,98 @@ async def debug_raw_team(team_id: int):
             data = r.json()
             events = data.get("events", [])
             if not events:
-                return {"status": r.status_code, "events": 0, "raw": data}
-            e = events[0]
+                return {"status": r.status_code, "team_id": team_id, "events": 0, "raw_error": data}
+            # Find a finished event for score structure
+            finished = [e for e in events if e.get("status",{}).get("type") == "finished"]
+            e = finished[0] if finished else events[0]
             return {
                 "status": r.status_code,
+                "team_id": team_id,
                 "total_events": len(events),
-                "first_event_structure": {
-                    "id": e.get("id"),
+                "finished_count": len(finished),
+                "all_statuses": list({ev.get("status",{}).get("type","?") for ev in events}),
+                "sample_finished_event": {
                     "status": e.get("status", {}).get("type"),
-                    "startTimestamp": e.get("startTimestamp"),
-                    "homeTeam": e.get("homeTeam", {}),
-                    "awayTeam": e.get("awayTeam", {}),
+                    "homeTeam_name": e.get("homeTeam", {}).get("name"),
+                    "awayTeam_name": e.get("awayTeam", {}).get("name"),
                     "homeScore": e.get("homeScore", {}),
                     "awayScore": e.get("awayScore", {}),
-                },
-                "all_statuses": list({ev.get("status",{}).get("type","?") for ev in events}),
-                "finished_count": sum(1 for ev in events if ev.get("status",{}).get("type") == "finished"),
+                    "startTimestamp": e.get("startTimestamp"),
+                } if finished else {"note": "no finished events found", "first_event": e.get("status",{})},
             }
         except Exception as ex:
-            return {"error": str(ex)}
+            return {"error": str(ex), "team_id": team_id}
+
+
+@router.get("/api/debug/real-team-ids")
+async def debug_real_team_ids():
+    """Obtener IDs reales de Sofascore de los equipos del próximo partido de PrvaLiga"""
+    from app.football_api import _fetch_sf_fixtures, _get_season, SF_HEADERS, TOURNAMENT_IDS
+    fixtures = await _fetch_sf_fixtures("PrvaLiga", days_ahead=14)
+    if not fixtures:
+        return {"error": "No fixtures found for PrvaLiga"}
+    result = []
+    for e in fixtures[:5]:
+        ht = e.get("homeTeam", {})
+        at = e.get("awayTeam", {})
+        result.append({
+            "home": ht.get("name"), "home_sf_id": ht.get("id"),
+            "away": at.get("name"), "away_sf_id": at.get("id"),
+        })
+    return {"fixtures": result, "use_these_ids_for_raw_team": [r["home_sf_id"] for r in result[:3]]}
+
+
+@router.get("/api/debug/pipeline-test")
+async def debug_pipeline_test(league: str = "PrvaLiga"):
+    """Test completo: fixture → IDs → forma → análisis de UN partido"""
+    from app.football_api import _fetch_sf_fixtures, fetch_team_form, fetch_h2h, fetch_standings, _parse_fixture
+    from app.xbet_scraper import get_odds_for
+
+    # Step 1: get fixture
+    fixtures_raw = await _fetch_sf_fixtures(league, days_ahead=14)
+    if not fixtures_raw:
+        return {"step": "fixtures", "error": "No fixtures found", "league": league}
+
+    e = fixtures_raw[0]
+    ht = e.get("homeTeam", {})
+    at = e.get("awayTeam", {})
+    home_id = ht.get("id", 0)
+    away_id = at.get("id", 0)
+    match = _parse_fixture(e, league)
+
+    result = {
+        "step1_fixture": {"home": ht.get("name"), "home_id": home_id,
+                          "away": at.get("name"), "away_id": away_id},
+    }
+
+    # Step 2: fetch form with REAL SF IDs
+    import asyncio
+    home_form, away_form = await asyncio.gather(
+        fetch_team_form(home_id),
+        fetch_team_form(away_id),
+    )
+    result["step2_home_form"] = {
+        "games_analyzed": home_form.get("games_analyzed", 0),
+        "form_string": home_form.get("form_string", ""),
+        "avg_scored": home_form.get("avg_scored"),
+        "recent_count": len(home_form.get("recent_matches", [])),
+        "first_recent": home_form.get("recent_matches", [{}])[0] if home_form.get("recent_matches") else None,
+        "is_mock": home_form.get("games_analyzed", 0) == 0,
+    }
+    result["step2_away_form"] = {
+        "games_analyzed": away_form.get("games_analyzed", 0),
+        "form_string": away_form.get("form_string", ""),
+        "recent_count": len(away_form.get("recent_matches", [])),
+        "is_mock": away_form.get("games_analyzed", 0) == 0,
+    }
+
+    # Step 3: H2H
+    h2h = await fetch_h2h(home_id, away_id)
+    result["step3_h2h"] = {"total_matches": h2h.get("total_matches", 0)}
+
+    # Step 4: odds
+    odds = await get_odds_for(match["home_team"], match["away_team"], league)
+    result["step4_odds"] = {"found": odds is not None, "home": odds.get("home") if odds else None}
+
+    result["overall_status"] = "✓ REAL" if home_form.get("games_analyzed", 0) > 0 else "⚠ MOCK (SF blocking form)"
+    return result
