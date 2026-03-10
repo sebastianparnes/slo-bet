@@ -244,6 +244,7 @@ body{
 .b-odd{background:var(--ink);color:var(--lime)}
 .b-low{background:var(--lime);color:var(--ink)}
 .b-med{background:var(--yellow);color:var(--ink)}
+.b-high{background:#c0392b33;color:#c0392b}
 .b-conf{background:var(--surf);color:var(--ink);font-weight:500}
 .rreason{font-family:var(--mono);font-size:11px;color:var(--dim);padding:2px 0 2px 14px;position:relative}
 .rreason::before{content:'›';position:absolute;left:4px;color:var(--green)}
@@ -967,18 +968,27 @@ function renderModal(d) {
     <div class="sec">Recomendaciones</div>
     <div class="rlist">${recs.map((r,i)=>{
       const ev=r.ev,evStr=typeof ev==='number'?(ev*100).toFixed(1):ev;
+      const btIcons={'1X2':'⚽','double_chance':'🔄','over_under':'📊','btts':'🥅',
+        'btts_ht':'⏱','halftime':'1T','asian_handicap':'🏹','corners':'📐',
+        'cards':'🟨','exact_score':'🎯'};
+      const btNames={'1X2':'1X2','double_chance':'Doble Op.','over_under':'O/U Goles',
+        'btts':'BTTS','btts_ht':'BTTS 1er T','halftime':'1er Tiempo',
+        'asian_handicap':'H. Asiático','corners':'Corners','cards':'Tarjetas',
+        'exact_score':'Result. Exacto'};
+      const riskCol={'low':'b-low','medium':'b-med','high':'b-high'};
+      const riskLbl={'low':'🟢 Bajo','medium':'🟡 Medio','high':'🔴 Alto'};
+      const icon=btIcons[r.bet_type]||'📋';
+      const typeName=btNames[r.bet_type]||r.bet_type.replace(/_/g,' ');
       return `<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}">
-        <div class="rihead"><div><div class="ritype">${r.bet_type.replace(/_/g,' ')}</div><div class="riname">${r.label}</div></div>
+        <div class="rihead"><div><div class="ritype">${icon} ${typeName}</div><div class="riname">${r.label}</div></div>
           <div class="rbadges">
             ${r.is_value?`<span class="badge b-ev">⚡EV+${evStr}%</span>`:''}
             ${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}
-            <span class="badge ${r.risk_level==='low'?'b-low':'b-med'}">${r.risk_level==='low'?'Bajo':'Medio'}</span>
+            <span class="badge ${riskCol[r.risk_level]||'b-med'}">${riskLbl[r.risk_level]||r.risk_level}</span>
             <span class="badge b-conf">${Math.round(r.confidence)}%</span>
           </div>
         </div>
-        <div>${(r.reasoning||[]).map(rs=>`<div class="rreason">· ${rs}</div>`).join('')}</div>
-        ${i===0?`<button class="btn-log" onclick='openBetFromMatch(${JSON.stringify(d)},${JSON.stringify(r)})'>+ Registrar esta apuesta</button>`:''}
-      </div>`;
+        <div>${(r.reasoning||[]).map(rs=>`<div class="rreason">· ${rs}</div>`).join('')}</div>`;
     }).join('')}</div>
     ${warns.length?`<div style="margin-top:12px">${warns.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
