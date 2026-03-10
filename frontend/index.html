@@ -727,6 +727,7 @@ async function openMatchModal(idx) {
 }
 
 function renderModal(d) {
+ try {
   const FL={'PrvaLiga':'🇸🇮','2SNL':'🇸🇮','PrimeraDivision':'🇦🇷','PrimeraNacional':'🇦🇷',
     'ChampionsLeague':'🏆','PremierLeague':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','LaLiga':'🇪🇸','SerieA':'🇮🇹',
     'Bundesliga':'🇩🇪','Ligue1':'🇫🇷','CroatiaHNL':'🇭🇷','SerbiaSuper':'🇷🇸','UruguayPrimera':'🇺🇾'};
@@ -957,6 +958,13 @@ function renderModal(d) {
     }).join('')}</div>
     ${warns.length?`<div style="margin-top:12px">${warns.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
+ } catch(err) {
+   console.error('renderModal crash:', err);
+   document.getElementById('modal-body').innerHTML =
+     '<div style="padding:20px;font-family:var(--mono);color:var(--red);font-size:11px">'
+     +'<b>JS Error — mandá esto al dev:</b><br><br>'
+     +'<code>'+err.message+'</code><br><pre style="font-size:9px;white-space:pre-wrap;margin-top:8px">'+err.stack+'</pre></div>';
+ }
 }
 
 /* ── Bet modal ── */
