@@ -41,6 +41,7 @@ SF_HEADERS = {
 # In-memory caches
 _season_cache: dict[int, int] = {}
 _fixture_cache: dict[str, tuple[float, list]] = {}
+_h2h_event_cache: dict[tuple, int] = {}  # (home_id, away_id) -> sf_event_id
 FIXTURE_CACHE_TTL = 300  # 5 min
 
 
@@ -137,15 +138,31 @@ async def _fetch_sf_form(team_id: int, last_n: int = 7) -> list[dict]:
 # ── H2H ───────────────────────────────────────────────────────────────────
 
 async def _fetch_sf_h2h(home_id: int, away_id: int) -> list[dict]:
+    """H2H via /event/{event_id}/h2h — event_id comes from fixture cache."""
     async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
         try:
-            r = await client.get(
-                f"https://api.sofascore.com/api/v1/event/head2head/{home_id}/{away_id}"
-            )
+            event_id = (_h2h_event_cache.get((home_id, away_id))
+                        or _h2h_event_cache.get((away_id, home_id)))
+            if not event_id:
+                # Search fixture cache
+                for _ts, fixtures in _fixture_cache.values():
+                    for e in fixtures:
+                        ht = e.get("homeTeam") or {}
+                        at = e.get("awayTeam") or {}
+                        if {ht.get("id"), at.get("id")} == {home_id, away_id}:
+                            event_id = e.get("id")
+                            _h2h_event_cache[(home_id, away_id)] = event_id
+                            break
+                    if event_id:
+                        break
+            if not event_id:
+                print(f"[SF] h2h: no event_id found for {home_id} vs {away_id}")
+                return []
+            r = await client.get(f"https://api.sofascore.com/api/v1/event/{event_id}/h2h")
             if r.status_code != 200:
                 return []
             data = r.json()
-            return data.get("events", data.get("previousEvents", []))
+            return data.get("previousEvents", data.get("events", []))
         except Exception as e:
             print(f"[SF] h2h {home_id} vs {away_id}: {e}")
             return []
@@ -187,6 +204,10 @@ def _parse_fixture(e: dict, league: str) -> dict:
     dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00") if ts else ""
     ht = e.get("homeTeam", {})
     at = e.get("awayTeam", {})
+    # Store event_id so H2H lookup can find it
+    eid = e.get("id")
+    if eid and ht.get("id") and at.get("id"):
+        _h2h_event_cache[(ht["id"], at["id"])] = eid
     return {
         "id":            str(e.get("id", "")),
         "match_id":      str(e.get("id", "")),
