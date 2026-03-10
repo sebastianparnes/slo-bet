@@ -715,9 +715,9 @@ function renderModal(d) {
 
   function fdClickable(fs,rl){
     const chars=(fs||'?????').split('').filter(c=>'WGDELP'.includes(c));
-    const rev=[...(rl||[])].reverse();
+    const recent=(rl||[]);  // already newest first
     return chars.map((c,i)=>{
-      const m=rev[i];
+      const m=recent[i];
       const tip=m?`title="${m.home||''} ${m.score||''} ${m.away||''} · ${m.date||''}"`:'';
       const sty=m?`cursor:help;border-bottom:1.5px dotted ${fcol(c)};padding-bottom:1px;`:'';
       return `<span ${tip} style="color:${fcol(c)};font-weight:700;font-size:15px;${sty}">${flbl(c)}</span>`;

@@ -122,12 +122,13 @@ async def _fetch_sf_form(team_id: int, last_n: int = 7) -> list[dict]:
     async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
         try:
             r = await client.get(
-                f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0"
+                f"https://api.sofascore.com/api/v1/team/{team_id}/events/last/0"
             )
             if r.status_code != 200:
                 return []
             events = r.json().get("events", [])
-            return list(reversed(events))[:last_n]
+            # /events/last/0 returns newest first — take last_n most recent
+            return events[:last_n]
         except Exception as e:
             print(f"[SF] form team={team_id}: {e}")
             return []
@@ -221,9 +222,10 @@ def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
         return (t.get("name") or t.get("shortName") or t.get("nameCode") or "").strip()
 
     for e in events:
-        # Only process finished matches
         status = (e.get("status") or {}).get("type", "")
-        if status not in ("finished",):
+        if status in ("canceled", "postponed", "notstarted", "inprogress"):
+            continue
+        if status != "finished":
             continue
 
         ht = e.get("homeTeam", {})
@@ -264,13 +266,13 @@ def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
     n = len(results)
     return {
         "form":           results,
-        "form_string":    "".join(results[:5]),
+        "form_string":    "".join(reversed(results[:5])),  # oldest→newest for display
         "avg_scored":     round(sum(scored) / n, 2),
         "avg_conceded":   round(sum(conceded) / n, 2),
         "clean_sheets":   sum(1 for g in conceded if g == 0),
         "btts_count":     sum(1 for s, c in zip(scored, conceded) if s > 0 and c > 0),
         "games_analyzed": n,
-        "recent_matches": recent_matches,
+        "recent_matches": recent_matches,  # already newest first (from /events/last/0)
     }
 
 
