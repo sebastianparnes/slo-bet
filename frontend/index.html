@@ -249,7 +249,7 @@ body{
 .b-high{background:#c0392b33;color:#c0392b}
 .b-conf{background:var(--surf);color:var(--ink);font-weight:500}
 .rreason{font-family:var(--mono);font-size:11px;color:var(--dim);padding:2px 0 2px 14px;position:relative}
-.reg-btn{background:var(--ink);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-family:var(--mono);cursor:pointer;letter-spacing:.05em;transition:opacity .15s}.reg-btn:hover{opacity:.75}
+.reg-btn{background:#1a1a1a;color:#e8f5e2;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-family:var(--mono);cursor:pointer;letter-spacing:.05em;transition:background .15s;font-weight:600}.reg-btn:hover{background:#333}
 .rreason::before{content:'›';position:absolute;left:4px;color:var(--green)}
 .btn-log{width:100%;margin-top:10px;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--lime);border:1.5px solid var(--ink);padding:10px;cursor:pointer;transition:all .15s}
 .btn-log:hover,.btn-log:active{background:var(--green);border-color:var(--green);color:#fff}
@@ -1014,7 +1014,8 @@ function renderModal(d) {
             data-type="${r.bet_type}"
             data-sel="${r.selection}"
             data-odd="${r.xbet_odd||r.min_odds||''}">+ Registrar apuesta</button>
-        </div>`;
+        </div>
+      </div>`;
     }).join('')}</div>
     ${warns.length?`<div style="margin-top:12px">${warns.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}
   `;
