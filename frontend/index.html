@@ -792,8 +792,8 @@ function renderModal(d) {
   // Score items with explanations
   const hf=bd.form||{}, hh=bd.h2h||{}, hst=bd.standings||{}, hg=bd.goals||{}, hha=bd.home_advantage||{}, hco=bd.consistency||{};
   function scExplain(key){
-    const hfForm=(hf.home_form||[]).slice(0,5).join(' ')||'—';
-    const afForm=(hf.away_form||[]).slice(0,5).join(' ')||'—';
+    const hfForm=Array.isArray(hf.home_form)?(hf.home_form).slice(0,5).join(' ')||'—':'—';
+    const afForm=Array.isArray(hf.away_form)?(hf.away_form).slice(0,5).join(' ')||'—':'—';
     const m={
       Forma: '<b>Forma reciente</b> (max 25 pts)<br>Basado en últimos 7 partidos de cada equipo.<br>'
         +'· Local: '+hfForm+' → avg '+(hf.home_avg_scored||'?')+' anotados, '+(hf.home_avg_conceded||'?')+' enc/p<br>'
