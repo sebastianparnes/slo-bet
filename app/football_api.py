@@ -207,18 +207,35 @@ def _parse_fixture(e: dict, league: str) -> dict:
 def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
     results, scored, conceded, recent_matches = [], [], [], []
 
+    def _score_val(s: dict):
+        """Try all known Sofascore score fields."""
+        for k in ("current", "display", "normaltime", "period2", "extra"):
+            v = s.get(k)
+            if v is not None:
+                try: return int(v)
+                except: pass
+        return None
+
+    def _team_name(t: dict) -> str:
+        """Try all known name fields."""
+        return (t.get("name") or t.get("shortName") or t.get("nameCode") or "").strip()
+
     for e in events:
+        # Only process finished matches
+        status = (e.get("status") or {}).get("type", "")
+        if status not in ("finished",):
+            continue
+
         ht = e.get("homeTeam", {})
         at = e.get("awayTeam", {})
         home_id = ht.get("id")
         hs = e.get("homeScore", {})
         as_ = e.get("awayScore", {})
-        hg = hs.get("current", hs.get("display"))
-        ag = as_.get("current", as_.get("display"))
+        hg = _score_val(hs)
+        ag = _score_val(as_)
         if hg is None or ag is None:
             continue
 
-        hg, ag = int(hg), int(ag)
         is_home = (home_id == team_sf_id)
         tg = hg if is_home else ag
         og = ag if is_home else hg
@@ -232,10 +249,10 @@ def _parse_form_events(events: list[dict], team_sf_id: int) -> Optional[dict]:
         conceded.append(og)
 
         ts = e.get("startTimestamp", 0)
-        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%y") if ts else ""
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m") if ts else ""
         recent_matches.append({
-            "home":   ht.get("name", ""),
-            "away":   at.get("name", ""),
+            "home":   _team_name(ht),
+            "away":   _team_name(at),
             "score":  f"{hg}-{ag}",
             "date":   date_str,
             "result": res,

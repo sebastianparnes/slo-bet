@@ -89,29 +89,44 @@ async def debug_analysis_sample(league: str = "PrvaLiga"):
 
 @router.get("/api/debug/sofascore-proxy")
 async def debug_sofascore_proxy():
-    """Chequear si Sofascore responde desde Railway"""
-    async with httpx.AsyncClient(timeout=10) as client:
+    """Chequear si Sofascore responde desde Railway — usa season ID dinámico"""
+    from app.football_api import _get_season, SF_HEADERS
+    sid = await _get_season(212)
+    if not sid:
+        return {"error": "No se pudo obtener season ID para PrvaLiga (tid=212)"}
+    async with httpx.AsyncClient(timeout=10, headers=SF_HEADERS) as client:
         try:
-            r = await client.get(
-                "https://api.sofascore.com/api/v1/unique-tournament/212/season/63814/events/next/0",
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Accept": "application/json",
-                    "Referer": "https://www.sofascore.com/",
-                }
-            )
+            url = f"https://api.sofascore.com/api/v1/unique-tournament/212/season/{sid}/events/next/0"
+            r = await client.get(url)
             data = r.json()
             events = data.get("events", [])
+            # Show raw structure of first event so we can debug field names
+            raw_first = {}
+            if events:
+                e = events[0]
+                raw_first = {
+                    "homeTeam_keys": list(e.get("homeTeam", {}).keys()),
+                    "homeScore_keys": list(e.get("homeScore", {}).keys()),
+                    "homeScore_val": e.get("homeScore", {}),
+                    "startTimestamp": e.get("startTimestamp"),
+                    "status_type": e.get("status", {}).get("type"),
+                }
             return {
+                "season_id": sid,
                 "status": r.status_code,
                 "events_found": len(events),
                 "sample": [
-                    {"home": e.get("homeTeam",{}).get("name"), "away": e.get("awayTeam",{}).get("name")}
+                    {
+                        "home": e.get("homeTeam",{}).get("name"),
+                        "away": e.get("awayTeam",{}).get("name"),
+                        "status": e.get("status",{}).get("type"),
+                    }
                     for e in events[:3]
-                ]
+                ],
+                "raw_first_event_debug": raw_first,
             }
         except Exception as e:
-            return {"error": str(e)}
+            return {"season_id": sid, "error": str(e)}
 
 
 @router.get("/api/debug/full")
@@ -132,12 +147,12 @@ async def debug_full():
     # Test Sofascore
     async with httpx.AsyncClient(timeout=10) as client:
         try:
-            r = await client.get(
-                "https://api.sofascore.com/api/v1/unique-tournament/212/season/63814/events/next/0",
-                headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json", "Referer": "https://www.sofascore.com/"}
-            )
+            from app.football_api import _get_season, SF_HEADERS
+            sid = await _get_season(212)
+            url = f"https://api.sofascore.com/api/v1/unique-tournament/212/season/{sid}/events/next/0"
+            r = await client.get(url, headers=SF_HEADERS)
             events = r.json().get("events", [])
-            results["sofascore"] = {"status": r.status_code, "events": len(events)}
+            results["sofascore"] = {"status": r.status_code, "season_id": sid, "events": len(events)}
         except Exception as e:
             results["sofascore"] = {"error": str(e)}
 
@@ -167,3 +182,34 @@ async def debug_full():
         results["prvaliga_matches"] = f"ERROR: {e}"
 
     return results
+
+
+@router.get("/api/debug/raw-team/{team_id}")
+async def debug_raw_team(team_id: int):
+    """Ver estructura RAW de Sofascore para un equipo — útil para debuggear campos"""
+    from app.football_api import SF_HEADERS
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        try:
+            r = await client.get(f"https://api.sofascore.com/api/v1/team/{team_id}/events/previous/0")
+            data = r.json()
+            events = data.get("events", [])
+            if not events:
+                return {"status": r.status_code, "events": 0, "raw": data}
+            e = events[0]
+            return {
+                "status": r.status_code,
+                "total_events": len(events),
+                "first_event_structure": {
+                    "id": e.get("id"),
+                    "status": e.get("status", {}).get("type"),
+                    "startTimestamp": e.get("startTimestamp"),
+                    "homeTeam": e.get("homeTeam", {}),
+                    "awayTeam": e.get("awayTeam", {}),
+                    "homeScore": e.get("homeScore", {}),
+                    "awayScore": e.get("awayScore", {}),
+                },
+                "all_statuses": list({ev.get("status",{}).get("type","?") for ev in events}),
+                "finished_count": sum(1 for ev in events if ev.get("status",{}).get("type") == "finished"),
+            }
+        except Exception as ex:
+            return {"error": str(ex)}
