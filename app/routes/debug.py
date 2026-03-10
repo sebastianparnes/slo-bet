@@ -382,25 +382,31 @@ async def debug_form_via_season(team_id: int, league: str = "PrvaLiga"):
 
 @router.get("/api/debug/h2h-test/{home_id}/{away_id}")
 async def debug_h2h_test(home_id: int, away_id: int):
-    """Probar distintos endpoints H2H de Sofascore"""
-    from app.football_api import SF_HEADERS
+    """Probar H2H de Sofascore — busca event_id del fixture primero"""
+    from app.football_api import SF_HEADERS, _h2h_event_cache, _fetch_sf_fixtures, TOURNAMENT_IDS
+    # First ensure fixtures are loaded so event_id cache is populated
+    import asyncio
+    await asyncio.gather(*[_fetch_sf_fixtures(lg, 14) for lg in list(TOURNAMENT_IDS.keys())[:4]])
+
+    event_id = (_h2h_event_cache.get((home_id, away_id))
+                or _h2h_event_cache.get((away_id, home_id)))
+
     async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
-        urls = {
-            "head2head_direct": f"https://api.sofascore.com/api/v1/event/head2head/{home_id}/{away_id}",
-            "team_vs_team":     f"https://api.sofascore.com/api/v1/team/{home_id}/versus/{away_id}/matches",
+        result = {
+            "home_id": home_id,
+            "away_id": away_id,
+            "event_id_found": event_id,
+            "h2h_cache_size": len(_h2h_event_cache),
         }
-        results = {}
-        for k, url in urls.items():
-            try:
-                r = await client.get(url)
-                data = r.json()
-                events = data.get("events") or data.get("previousEvents") or data.get("matches") or []
-                results[k] = {
-                    "status": r.status_code,
-                    "events": len(events),
-                    "keys": list(data.keys()),
-                    "sample": events[0].get("homeTeam",{}).get("name") if events else None,
-                }
-            except Exception as e:
-                results[k] = {"error": str(e)}
-        return results
+        if event_id:
+            r = await client.get(f"https://api.sofascore.com/api/v1/event/{event_id}/h2h")
+            data = r.json()
+            events = data.get("previousEvents", data.get("events", []))
+            result["h2h_status"] = r.status_code
+            result["h2h_events"] = len(events)
+            result["h2h_keys"] = list(data.keys())
+            result["sample"] = [{"home": e.get("homeTeam",{}).get("name"), "away": e.get("awayTeam",{}).get("name"), "score": f'{e.get("homeScore",{}).get("current","?")}-{e.get("awayScore",{}).get("current","?")}' } for e in events[:3]]
+        else:
+            result["error"] = "No event_id found — fixture not in cache yet"
+            result["cache_keys"] = list(_h2h_event_cache.items())[:5]
+        return result

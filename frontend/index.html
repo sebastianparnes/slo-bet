@@ -151,11 +151,11 @@ body{
 @keyframes rot{to{transform:rotate(360deg)}}
 
 /* ── CARDS GRID ── */
-.cards{columns:380px 3;gap:14px}
-@media(max-width:820px){.cards{columns:1}}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;align-items:start}
+@media(max-width:820px){.cards{grid-template-columns:1fr}}
 
 .mc{
-  break-inside:avoid;background:var(--card);
+  background:var(--card);
   border:1.5px solid var(--rule);margin-bottom:12px;
   cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;
   position:relative;overflow:hidden;
