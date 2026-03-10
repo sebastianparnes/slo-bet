@@ -790,63 +790,49 @@ function renderModal(d) {
 
   // Score items with explanations
   const hf=bd.form||{}, hh=bd.h2h||{}, hst=bd.standings||{}, hg=bd.goals||{}, hha=bd.home_advantage||{}, hco=bd.consistency||{};
+  function scExplain(key){
+    const hfForm=(hf.home_form||[]).slice(0,5).join(' ')||'—';
+    const afForm=(hf.away_form||[]).slice(0,5).join(' ')||'—';
+    const m={
+      Forma: '<b>Forma reciente</b> (max 25 pts)<br>Basado en últimos 7 partidos de cada equipo.<br>'
+        +'· Local: '+hfForm+' → avg '+(hf.home_avg_scored||'?')+' anotados, '+(hf.home_avg_conceded||'?')+' enc/p<br>'
+        +'· Visita: '+afForm+' → avg '+(hf.away_avg_scored||'?')+' anotados, '+(hf.away_avg_conceded||'?')+' enc/p<br>'
+        +'<span style="color:var(--dim)">Más pts = mejor forma del local vs visita</span>',
+      H2H: '<b>Historial directo</b> (max 20 pts)<br>'
+        +(hh.total_matches||0)+' partidos previos entre estos equipos.<br>'
+        +'· Local ganó: '+(hh.home_wins||0)+' · Empates: '+(hh.draws||0)+' · Visita ganó: '+(hh.away_wins||0)+'<br>'
+        +'· Promedio goles: '+(hh.avg_goals_h2h||0)+'  · BTTS: '+(hh.btts_pct||0)+'%<br>'
+        +'<span style="color:var(--dim)">Más pts = local tiene ventaja histórica</span>',
+      Tabla: '<b>Posición en tabla</b> (max 20 pts)<br>'
+        +'· Local: puesto #'+(hst.home_position||'?')+' con '+(hst.home_points||'?')+' pts<br>'
+        +'· Visita: puesto #'+(hst.away_position||'?')+' con '+(hst.away_points||'?')+' pts<br>'
+        +'<span style="color:var(--dim)">Más pts = local está más arriba en la tabla</span>',
+      Goles: '<b>Potencial goleador</b> (max 20 pts)<br>'
+        +'· Local anota: '+(hf.home_avg_scored||'?')+'/p · Visita encaja: '+(hf.away_avg_conceded||'?')+'/p<br>'
+        +'· Over 2.5: '+(hh.over25_pct||0)+'% · BTTS: '+(hh.btts_pct||0)+'%<br>'
+        +'<span style="color:var(--dim)">Más pts = mayor probabilidad de goles</span>',
+      Local: '<b>Ventaja de local</b> (max 10 pts)<br>'
+        +'Historial del equipo local jugando en casa.<br>'
+        +'· Partidos en casa analizados: '+(hha.home_games||'?')+'<br>'
+        +'· Win rate en casa: '+(hha.home_win_rate||'?')+'%<br>'
+        +'<span style="color:var(--dim)">Más pts = el local es fuerte en casa</span>',
+      'Consist.': '<b>Consistencia</b> (max 5 pts)<br>'
+        +'Mide la estabilidad del rendimiento reciente del local.<br>'
+        +'· Desviación estándar de goles: '+(hco.home_std||'?')+'<br>'
+        +'· Racha sin perder: '+(hco.home_unbeaten||'?')+' partidos<br>'
+        +'<span style="color:var(--dim)">Más pts = rendimiento más estable y predecible</span>',
+    };
+    return m[key]||'';
+  }
   const si=[
-    {
-      l:'Forma', v:hf.score_out_of_25, mx:25,
-      explain:`<b>Forma reciente</b> (max 25 pts)<br>
-        Basado en los últimos 7 partidos de cada equipo.<br>
-        · Local: ${(hf.home_form||[]).slice(0,5).join(' ')} → avg ${hf.home_avg_scored||'?'} goles anotados, ${hf.home_avg_conceded||'?'} enc.<br>
-        · Visita: ${(hf.away_form||[]).slice(0,5).join(' ')} → avg ${hf.away_avg_scored||'?'} goles anotados, ${hf.away_avg_conceded||'?'} enc.<br>
-        <span style="color:var(--dim)">Más puntos = mejor forma reciente del local vs visita</span>`
-    },
-    {
-      l:'H2H', v:hh.score_out_of_20, mx:20,
-      explain:`<b>Historial directo</b> (max 20 pts)<br>
-        ${hh.total_matches||0} partidos previos entre estos equipos.<br>
-        · Local ganó: ${hh.home_wins||0} veces<br>
-        · Empates: ${hh.draws||0}<br>
-        · Visita ganó: ${hh.away_wins||0} veces<br>
-        · Promedio goles: ${hh.avg_goals_h2h||0}<br>
-        <span style="color:var(--dim)">Más puntos = local tiene ventaja histórica</span>`
-    },
-    {
-      l:'Tabla', v:hst.score_out_of_20, mx:20,
-      explain:`<b>Posición en la tabla</b> (max 20 pts)<br>
-        Compara la posición actual de ambos equipos en la liga.<br>
-        · Local: puesto #${hst.home_position||'?'} con ${hst.home_points||'?'} pts<br>
-        · Visita: puesto #${hst.away_position||'?'} con ${hst.away_points||'?'} pts<br>
-        <span style="color:var(--dim)">Más puntos = local está más arriba en la tabla</span>`
-    },
-    {
-      l:'Goles', v:hg.score_out_of_20, mx:20,
-      explain:`<b>Potencial goleador</b> (max 20 pts)<br>
-        Combina promedio de goles anotados y encajados.<br>
-        · Local anota: ${hf.home_avg_scored||'?'} x partido<br>
-        · Visita encaja: ${hf.away_avg_conceded||'?'} x partido<br>
-        · BTTS local: ${hh.btts_pct||0}%<br>
-        · Over 2.5: ${hh.over25_pct||0}%<br>
-        <span style="color:var(--dim)">Más puntos = mayor probabilidad de goles</span>`
-    },
-    {
-      l:'Local', v:hha.score_out_of_10, mx:10,
-      explain:`<b>Ventaja de local</b> (max 10 pts)<br>
-        Historial del equipo local jugando en casa.<br>
-        · Partidos como local analizados: ${hha.home_games||'?'}<br>
-        · Win rate en casa: ${hha.home_win_rate||'?'}%<br>
-        · Avg goles en casa: ${hha.home_goals_avg||'?'}<br>
-        <span style="color:var(--dim)">Más puntos = el local es fuerte en casa</span>`
-    },
-    {
-      l:'Consist.', v:hco.score_out_of_5, mx:5,
-      explain:`<b>Consistencia</b> (max 5 pts)<br>
-        Mide cuánto varía el rendimiento del local en sus últimos partidos.<br>
-        · Desviación estándar de goles: ${hco.home_std||'?'}<br>
-        · Partidos sin perder (racha): ${hco.home_unbeaten||'?'}<br>
-        <span style="color:var(--dim)">Más puntos = rendimiento más estable y predecible</span>`
-    },
+    {l:'Forma',    v:hf.score_out_of_25,  mx:25},
+    {l:'H2H',      v:hh.score_out_of_20,  mx:20},
+    {l:'Tabla',    v:hst.score_out_of_20, mx:20},
+    {l:'Goles',    v:hg.score_out_of_20,  mx:20},
+    {l:'Local',    v:hha.score_out_of_10, mx:10},
+    {l:'Consist.', v:hco.score_out_of_5,  mx:5},
   ];
-
-  const oddsHTML=odds
+    const oddsHTML=odds
     ?`<div class="odds-panel">
         <div class="ob"><div class="obl">1 Local</div><div class="obv">${odds.home||'—'}</div></div>
         <div class="ob"><div class="obl">X Empate</div><div class="obv">${odds.draw||'—'}</div></div>
@@ -912,13 +898,16 @@ function renderModal(d) {
     <div class="sec">Cuotas ar-1xbet</div>${oddsHTML}
 
     <div class="sec">Score ${bd.overall||0}/100</div>
-    <div class="sgrid">${si.map((s,i)=>`
-      <div class="sc sc-btn" onclick="toggleScCard(${i})" title="Click para ver desglose">
-        <div class="scl">${s.l} <span style="font-size:9px;opacity:.5">▾</span></div>
-        <div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div>
-        <div class="scbar"><div class="scfill" style="width:${Math.min((s.v||0)/s.mx*100,100).toFixed(0)}%"></div></div>
-        <div class="sc-detail" id="scd-${i}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--rule);font-size:10px;line-height:1.6;color:var(--dim)">${s.explain||''}</div>
-      </div>`).join('')}</div>
+    <div class="sgrid">${si.map((s,i)=>{
+      const ex=scExplain(s.l);
+      const pct=Math.min((s.v||0)/s.mx*100,100).toFixed(0);
+      return '<div class="sc sc-btn" onclick="toggleScCard('+i+')" title="Click para ver desglose">'
+        +'<div class="scl">'+s.l+' <span style=\'font-size:9px;opacity:.5\'>▾</span></div>'
+        +'<div class="scv">'+(s.v||0).toFixed(1)+'<span style=\'font-size:10px;color:var(--dim)\'>/'+(s.mx)+'</span></div>'
+        +'<div class="scbar"><div class="scfill" style=\'width:'+pct+'%\'></div></div>'
+        +(ex?'<div class="sc-detail" id="scd-'+i+'" style=\'display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--rule);font-size:10px;line-height:1.6;color:var(--dim)\">'+ex+'</div>':'')
+        +'</div>';
+    }).join('')}</div>
 
     <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover en cada letra</span></div>
     <div class="frow">
