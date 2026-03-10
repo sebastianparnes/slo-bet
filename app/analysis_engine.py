@@ -399,7 +399,7 @@ def _goals_component(home_form: dict, away_form: dict, h2h: dict) -> tuple[float
     home_xg = min(max(home_xg, 0.4), 3.5)
     away_xg = min(max(away_xg, 0.3), 3.0)
     
-    over25_prob = _over25_probability(home_xg, away_xg)
+    over25_prob = _over_probability(home_xg, away_xg, 2.5)
     btts_prob = _btts_probability(home_xg, away_xg)
     
     # H2H adjustment
