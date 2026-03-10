@@ -231,10 +231,12 @@ body{
 .h2hc{background:var(--surf);border:1px solid var(--rule);padding:8px 12px;text-align:center;flex:1;min-width:60px}
 .h2hl{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
 .h2hv{font-family:var(--mono);font-size:18px;font-weight:500;margin-top:2px}
-.rlist{display:flex;flex-direction:column;gap:8px}
-.ri{background:var(--card);border:1.5px solid var(--rule);padding:12px 14px}
+.rlist{display:flex;flex-direction:column;gap:10px}
+.ri{background:var(--card);border:1.5px solid var(--rule);padding:14px 16px;border-radius:8px}
 .ri.top{border-color:var(--green);border-width:2px}
 .ri.val{border-color:var(--lime);background:#f8ffe8}
+.ri-footer{display:flex;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid var(--rule)}
+.rreason-list{margin-top:6px}
 .rihead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
 .ritype{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
 .riname{font-weight:800;font-size:14px;margin-top:1px}
@@ -989,20 +991,29 @@ function renderModal(d) {
       const icon=btIcons[r.bet_type]||'📋';
       const typeName=btNames[r.bet_type]||r.bet_type.replace(/_/g,' ');
       return `<div class="ri ${i===0?'top':''} ${r.is_value?'val':''}">
-        <div class="rihead"><div><div class="ritype">${icon} ${typeName}</div><div class="riname">${r.label}</div></div>
+        <div class="rihead">
+          <div>
+            <div class="ritype">${icon} ${typeName}</div>
+            <div class="riname">${r.label}</div>
+          </div>
           <div class="rbadges">
-            ${r.is_value?`<span class="badge b-ev">⚡EV+${evStr}%</span>`:''}
-            ${r.xbet_odd?`<span class="badge b-odd">@${r.xbet_odd}</span>`:(!r.is_value?`<span class="badge" style="background:var(--surf);color:var(--dim)">mín@${r.min_odds}</span>`:'')}
+            ${r.is_value ? '<span class="badge b-ev">EV+'+evStr+'%</span>' : ''}
+            ${r.xbet_odd ? '<span class="badge b-odd">@'+r.xbet_odd+'</span>' : (!r.is_value ? '<span class="badge" style="background:var(--surf);color:var(--dim)">min@'+r.min_odds+'</span>' : '')}
             <span class="badge ${riskCol[r.risk_level]||'b-med'}">${riskLbl[r.risk_level]||r.risk_level}</span>
             <span class="badge b-conf">${Math.round(r.confidence)}%</span>
           </div>
         </div>
-        <div>${(r.reasoning||[]).map(rs=>`<div class="rreason">· ${rs}</div>`).join('')}</div>
-        <div style="margin-top:8px;text-align:right">
-          <button class="reg-btn" onclick="regFromRec(this)" 
-            data-home="${d.home_team}" data-away="${d.away_team}" data-league="${d.league}"
-            data-date="${(d.match_date||'').split('T')[0]}" data-type="${r.bet_type}"
-            data-sel="${r.selection}" data-odd="${r.xbet_odd||r.min_odds||''}">📝 Registrar apuesta</button>
+        <div class="rreason-list">${(r.reasoning||[]).map(rs=>'<div class="rreason">· '+rs+'</div>').join('')}</div>
+        <div class="ri-footer">
+          <button class="reg-btn"
+            onclick="regFromRec(this)"
+            data-home="${d.home_team}"
+            data-away="${d.away_team}"
+            data-league="${d.league}"
+            data-date="${(d.match_date||'').split('T')[0]}"
+            data-type="${r.bet_type}"
+            data-sel="${r.selection}"
+            data-odd="${r.xbet_odd||r.min_odds||''}">+ Registrar apuesta</button>
         </div>`;
     }).join('')}</div>
     ${warns.length?`<div style="margin-top:12px">${warns.map(w=>`<div class="warn-item">${w}</div>`).join('')}</div>`:''}

@@ -162,13 +162,16 @@ def _score_matrix(home_xg: float, away_xg: float, max_goals: int = 8) -> list[li
     ]
 
 def _over_probability(home_xg: float, away_xg: float, line: float) -> float:
-    """P(total goals > line) for any line (1.5, 2.5, 3.5)."""
-    cutoff = int(line + 0.5)  # 2.5->3, 1.5->2, 3.5->4
+    """P(total goals > line) for any line (1.5, 2.5, 3.5).
+    For half-lines (x.5), P(over) = 1 - P(total <= floor(line)).
+    E.g. line=2.5: P(over) = 1 - P(total=0) - P(total=1) - P(total=2)
+    """
+    max_under = int(line)  # 2.5->2, 1.5->1, 3.5->3, 0.5->0
     prob_under = sum(
         _poisson_prob(home_xg, i) * _poisson_prob(away_xg, j)
-        for i in range(cutoff + 1)
-        for j in range(cutoff + 1 - i)
-        if i + j <= cutoff
+        for i in range(max_under + 1)
+        for j in range(max_under + 1)
+        if i + j <= max_under
     )
     return round(max(0, 1 - prob_under), 4)
 
