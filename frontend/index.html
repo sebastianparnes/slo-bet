@@ -212,6 +212,9 @@ body{
 .obv{font-family:var(--mono);font-size:20px;font-weight:500;margin-top:3px;color:var(--lime)}
 .no-odds{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--surf);border:1px solid var(--rule);padding:10px 14px}
 .sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.sc-btn{cursor:pointer;transition:border-color .15s,background .15s}
+.sc-btn:hover{border-color:var(--ink)!important;background:var(--surf)}
+.sc-btn.sc-open{border-color:var(--green)!important;background:var(--surf)}
 .sc{background:var(--surf);border:1px solid var(--rule);padding:10px 12px}
 .scl{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
 .scv{font-family:var(--mono);font-size:17px;font-weight:500}
@@ -410,7 +413,12 @@ select option{background:var(--card)}
     <div class="notice" id="api-notice">
       <strong>MODO DEMO</strong> — Algunos datos son simulados. Las cuotas vienen de ar-1xbet en vivo.
     </div>
-    <div class="tbar">
+    <div class="tbar" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.5px">ORDEN:</span>
+      <button class="pill sort-btn on" data-sort="score" onclick="setSort('score')">↓ Score</button>
+      <button class="pill sort-btn" data-sort="date" onclick="setSort('date')">📅 Fecha</button>
+      <button class="pill sort-btn" data-sort="league" onclick="setSort('league')">🏟 Liga</button>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--rule);margin:0 4px">|</span>
       <button class="pill on" data-league="all">Todas</button>
       <button class="pill" data-league="PrvaLiga">🇸🇮 PrvaLiga</button>
       <button class="pill" data-league="2SNL">🇸🇮 2.SNL</button>
@@ -544,7 +552,7 @@ Empezá con "📊 Estado completo" para ver si Sofascore y ar-1xbet responden.
   <div class="modal">
     <div class="mtop">
       <span class="mtitle" id="modal-title">Análisis</span>
-      <button class="mx" onclick="closeOv('ov-match')">✕</button>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-right:8px">ESC</span><button class="mx" onclick="closeOv('ov-match')">✕</button>
     </div>
     <div class="mbody" id="modal-body"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -609,7 +617,7 @@ Empezá con "📊 Estado completo" para ver si Sofascore y ar-1xbet responden.
 
 <script>
 /* ── State ── */
-let allMatches=[], _curList=[], leagueF='all', confF=false, _pre={}, updId=null;
+let allMatches=[], _curList=[], leagueF='all', confF=false, _pre={}, updId=null, _sortMode='score';
 let lastPendingCount = 0;
 
 /* ── Nav (works for both desktop + mobile buttons) ── */
@@ -619,6 +627,15 @@ function switchPage(page) {
   if (page==='history') { loadStats(); loadHistory(); }
 }
 document.querySelectorAll('.nb,.mnb').forEach(b => b.addEventListener('click', () => switchPage(b.dataset.page)));
+
+/* ── Sort ── */
+function setSort(mode){
+  _sortMode=mode;
+  document.querySelectorAll('.sort-btn').forEach(b=>{
+    b.classList.toggle('on', b.dataset.sort===mode);
+  });
+  applyF();
+}
 
 /* ── Filters ── */
 document.querySelectorAll('.pill[data-league]').forEach(p => p.addEventListener('click', () => {
@@ -655,7 +672,11 @@ function applyF() {
   if(leagueF!=='all') m=m.filter(x=>x.league===leagueF);
   if(confF) m=m.filter(x=>x.has_value_bet||(x.overall_confidence||0)>=65);
   const q=(document.getElementById('search-input')?.value||'').toLowerCase().trim();
-  if(q) m=m.filter(x=>(x.home_team||'').toLowerCase().includes(q)||(x.away_team||'').toLowerCase().includes(q));
+  if(q) m=m.filter(x=>(x.home_team||'').toLowerCase().includes(x)||(x.away_team||'').toLowerCase().includes(q));
+  // Sort
+  if(_sortMode==='score') m.sort((a,b)=>(b.overall_confidence||0)-(a.overall_confidence||0));
+  else if(_sortMode==='date') m.sort((a,b)=>new Date(a.match_date||0)-new Date(b.match_date||0));
+  else if(_sortMode==='league') m.sort((a,b)=>(a.league||'').localeCompare(b.league||''));
   renderCards(m);
 }
 
@@ -767,9 +788,63 @@ function renderModal(d) {
     </div>`;
   }
 
-  const si=[{l:'Forma',v:bd.form?.score_out_of_25,mx:25},{l:'H2H',v:bd.h2h?.score_out_of_20,mx:20},
-    {l:'Tabla',v:bd.standings?.score_out_of_20,mx:20},{l:'Goles',v:bd.goals?.score_out_of_20,mx:20},
-    {l:'Local',v:bd.home_advantage?.score_out_of_10,mx:10},{l:'Consist.',v:bd.consistency?.score_out_of_5,mx:5}];
+  // Score items with explanations
+  const hf=bd.form||{}, hh=bd.h2h||{}, hst=bd.standings||{}, hg=bd.goals||{}, hha=bd.home_advantage||{}, hco=bd.consistency||{};
+  const si=[
+    {
+      l:'Forma', v:hf.score_out_of_25, mx:25,
+      explain:`<b>Forma reciente</b> (max 25 pts)<br>
+        Basado en los últimos 7 partidos de cada equipo.<br>
+        · Local: ${(hf.home_form||[]).slice(0,5).join(' ')} → avg ${hf.home_avg_scored||'?'} goles anotados, ${hf.home_avg_conceded||'?'} enc.<br>
+        · Visita: ${(hf.away_form||[]).slice(0,5).join(' ')} → avg ${hf.away_avg_scored||'?'} goles anotados, ${hf.away_avg_conceded||'?'} enc.<br>
+        <span style="color:var(--dim)">Más puntos = mejor forma reciente del local vs visita</span>`
+    },
+    {
+      l:'H2H', v:hh.score_out_of_20, mx:20,
+      explain:`<b>Historial directo</b> (max 20 pts)<br>
+        ${hh.total_matches||0} partidos previos entre estos equipos.<br>
+        · Local ganó: ${hh.home_wins||0} veces<br>
+        · Empates: ${hh.draws||0}<br>
+        · Visita ganó: ${hh.away_wins||0} veces<br>
+        · Promedio goles: ${hh.avg_goals_h2h||0}<br>
+        <span style="color:var(--dim)">Más puntos = local tiene ventaja histórica</span>`
+    },
+    {
+      l:'Tabla', v:hst.score_out_of_20, mx:20,
+      explain:`<b>Posición en la tabla</b> (max 20 pts)<br>
+        Compara la posición actual de ambos equipos en la liga.<br>
+        · Local: puesto #${hst.home_position||'?'} con ${hst.home_points||'?'} pts<br>
+        · Visita: puesto #${hst.away_position||'?'} con ${hst.away_points||'?'} pts<br>
+        <span style="color:var(--dim)">Más puntos = local está más arriba en la tabla</span>`
+    },
+    {
+      l:'Goles', v:hg.score_out_of_20, mx:20,
+      explain:`<b>Potencial goleador</b> (max 20 pts)<br>
+        Combina promedio de goles anotados y encajados.<br>
+        · Local anota: ${hf.home_avg_scored||'?'} x partido<br>
+        · Visita encaja: ${hf.away_avg_conceded||'?'} x partido<br>
+        · BTTS local: ${hh.btts_pct||0}%<br>
+        · Over 2.5: ${hh.over25_pct||0}%<br>
+        <span style="color:var(--dim)">Más puntos = mayor probabilidad de goles</span>`
+    },
+    {
+      l:'Local', v:hha.score_out_of_10, mx:10,
+      explain:`<b>Ventaja de local</b> (max 10 pts)<br>
+        Historial del equipo local jugando en casa.<br>
+        · Partidos como local analizados: ${hha.home_games||'?'}<br>
+        · Win rate en casa: ${hha.home_win_rate||'?'}%<br>
+        · Avg goles en casa: ${hha.home_goals_avg||'?'}<br>
+        <span style="color:var(--dim)">Más puntos = el local es fuerte en casa</span>`
+    },
+    {
+      l:'Consist.', v:hco.score_out_of_5, mx:5,
+      explain:`<b>Consistencia</b> (max 5 pts)<br>
+        Mide cuánto varía el rendimiento del local en sus últimos partidos.<br>
+        · Desviación estándar de goles: ${hco.home_std||'?'}<br>
+        · Partidos sin perder (racha): ${hco.home_unbeaten||'?'}<br>
+        <span style="color:var(--dim)">Más puntos = rendimiento más estable y predecible</span>`
+    },
+  ];
 
   const oddsHTML=odds
     ?`<div class="odds-panel">
@@ -837,10 +912,13 @@ function renderModal(d) {
     <div class="sec">Cuotas ar-1xbet</div>${oddsHTML}
 
     <div class="sec">Score ${bd.overall||0}/100</div>
-    <div class="sgrid">${si.map(s=>`<div class="sc"><div class="scl">${s.l}</div>
-      <div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div>
-      <div class="scbar"><div class="scfill" style="width:${Math.min((s.v||0)/s.mx*100,100).toFixed(0)}%"></div></div>
-    </div>`).join('')}</div>
+    <div class="sgrid">${si.map((s,i)=>`
+      <div class="sc sc-btn" onclick="toggleScCard(${i})" title="Click para ver desglose">
+        <div class="scl">${s.l} <span style="font-size:9px;opacity:.5">▾</span></div>
+        <div class="scv">${(s.v||0).toFixed(1)}<span style="font-size:10px;color:var(--dim)">/${s.mx}</span></div>
+        <div class="scbar"><div class="scfill" style="width:${Math.min((s.v||0)/s.mx*100,100).toFixed(0)}%"></div></div>
+        <div class="sc-detail" id="scd-${i}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--rule);font-size:10px;line-height:1.6;color:var(--dim)">${s.explain||''}</div>
+      </div>`).join('')}</div>
 
     <div class="sec">Forma Reciente <span style="font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:normal">— hover en cada letra</span></div>
     <div class="frow">
@@ -1077,8 +1155,21 @@ async function delBet(id){
 }
 
 /* ── Overlay ── */
+function toggleScCard(i){
+  const el=document.getElementById('scd-'+i);
+  if(!el)return;
+  const open=el.style.display==='none';
+  // close all others
+  document.querySelectorAll('.sc-detail').forEach(d=>d.style.display='none');
+  document.querySelectorAll('.sc-btn').forEach(d=>d.classList.remove('sc-open'));
+  if(open){
+    el.style.display='block';
+    el.closest('.sc-btn').classList.add('sc-open');
+  }
+}
 function ovClick(e,id){if(e.target.id===id)closeOv(id)}
 function closeOv(id){document.getElementById(id).classList.remove('open')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeOv('ov-match');closeOv('ov-bet');}});
 
 /* ── Toast ── */
 function toast(msg){
