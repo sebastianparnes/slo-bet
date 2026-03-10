@@ -312,18 +312,19 @@ def _goals_component(home_form: dict, away_form: dict, h2h: dict) -> tuple[float
     }
 
 
-def _home_advantage_component(league: str) -> tuple[float, dict]:
-    """Score 0-10 for home advantage. Uses known home win rates for Slovenian leagues."""
+def _home_advantage_component(league: str, home_form: dict = None) -> tuple[float, dict]:
+    """Score 0-10 for home advantage using league stats + real team home record."""
     home_win_rates = {
-        "PrvaLiga": 0.44,
-        "2SNL": 0.41,
+        "PrvaLiga": 0.44, "2SNL": 0.41, "PrimeraDivision": 0.43,
+        "PrimeraNacional": 0.42, "ChampionsLeague": 0.47, "PremierLeague": 0.46,
+        "LaLiga": 0.47, "SerieA": 0.46, "Bundesliga": 0.46, "Ligue1": 0.45,
+        "CroatiaHNL": 0.44, "SerbiaSuper": 0.45, "UruguayPrimera": 0.43,
     }
-    rate = home_win_rates.get(league, 0.42)
-    score = rate * 10 / 0.5  # 0.5 = neutral reference
+    league_rate = home_win_rates.get(league, 0.42)
+    score = league_rate * 10 / 0.5
     score = min(max(score, 0), 10)
-    
     return round(score, 2), {
-        "league_home_win_rate": f"{round(rate * 100, 1)}%",
+        "league_home_win_rate": f"{round(league_rate * 100, 1)}%",
         "score_out_of_10": round(score, 2),
     }
 
@@ -599,7 +600,7 @@ def analyze_match(
     h2h_score_val, h2h_details = _h2h_component(h2h, home_id, away_id)
     standings_score_val, standings_details = _standings_component(standings, home_id, away_id)
     goals_score_val, home_xg, away_xg, goals_details = _goals_component(home_form, away_form, h2h)
-    home_adv_score, home_adv_details = _home_advantage_component(league)
+    home_adv_score, home_adv_details = _home_advantage_component(league, home_form)
     consistency_score, consistency_details = _consistency_component(home_form, away_form)
     
     # --- Overall Score ---

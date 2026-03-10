@@ -809,36 +809,52 @@ function renderModal(d) {
   // Score items with explanations
   const hf=bd.form||{}, hh=bd.h2h||{}, hst=bd.standings||{}, hg=bd.goals||{}, hha=bd.home_advantage||{}, hco=bd.consistency||{};
   function scExplain(key){
-    const hfForm=Array.isArray(hf.home_form)?(hf.home_form).slice(0,5).join(' ')||'—':'—';
-    const afForm=Array.isArray(hf.away_form)?(hf.away_form).slice(0,5).join(' ')||'—':'—';
+    // Use exact field names from analysis_engine.py
+    const hfStr=hf.home_form||'—';
+    const afStr=hf.away_form||'—';
     const m={
-      Forma: '<b>Forma reciente</b> (max 25 pts)<br>Basado en últimos 7 partidos de cada equipo.<br>'
-        +'· Local: '+hfForm+' → avg '+(hf.home_avg_scored||'?')+' anotados, '+(hf.home_avg_conceded||'?')+' enc/p<br>'
-        +'· Visita: '+afForm+' → avg '+(hf.away_avg_scored||'?')+' anotados, '+(hf.away_avg_conceded||'?')+' enc/p<br>'
-        +'<span style="color:var(--dim)">Más pts = mejor forma del local vs visita</span>',
+      Forma: '<b>Forma reciente</b> (max 25 pts)<br>'
+        +'Diferencia de rendimiento ponderado (W=3, D=1, L=0) en últimos partidos.<br>'
+        +'· Local: <b>'+hfStr+'</b> · avg goles: '+(hf.home_avg_scored||0)+' an / '+(hf.home_avg_conceded||0)+' enc<br>'
+        +'· Visita: <b>'+afStr+'</b> · avg goles: '+(hf.away_avg_scored||0)+' an / '+(hf.away_avg_conceded||0)+' enc<br>'
+        +'· Partidos analizados: '+(hf.home_games_analyzed||0)+' local / '+(hf.away_games_analyzed||0)+' visita<br>'
+        +'<span style="color:var(--green)">Más pts = mejor forma del local vs visita</span>',
+
       H2H: '<b>Historial directo</b> (max 20 pts)<br>'
-        +(hh.total_matches||0)+' partidos previos entre estos equipos.<br>'
-        +'· Local ganó: '+(hh.home_wins||0)+' · Empates: '+(hh.draws||0)+' · Visita ganó: '+(hh.away_wins||0)+'<br>'
-        +'· Promedio goles: '+(hh.avg_goals_h2h||0)+'  · BTTS: '+(hh.btts_pct||0)+'%<br>'
-        +'<span style="color:var(--dim)">Más pts = local tiene ventaja histórica</span>',
+        +(hh.total_matches
+          ? (hh.total_matches)+' partidos previos.<br>'
+            +'· Local ganó: '+(hh.home_wins||0)+' · Empates: '+(hh.draws||0)+' · Visita ganó: '+(hh.away_wins||0)+'<br>'
+            +'· Win rate local: '+(hh.home_win_rate||0)+'% · Avg goles: '+(hh.avg_goals_h2h||0)+'<br>'
+            +'· BTTS: '+(hh.btts_pct||0)+'% · Over 2.5: '+(hh.over25_pct||0)+'%'
+          : '⚠ Sin historial disponible — se usa valor neutro 10/20'
+        )+'<br><span style="color:var(--green)">Más pts = local domina el historial</span>',
+
       Tabla: '<b>Posición en tabla</b> (max 20 pts)<br>'
-        +'· Local: puesto #'+(hst.home_position||'?')+' con '+(hst.home_points||'?')+' pts<br>'
-        +'· Visita: puesto #'+(hst.away_position||'?')+' con '+(hst.away_points||'?')+' pts<br>'
-        +'<span style="color:var(--dim)">Más pts = local está más arriba en la tabla</span>',
+        +(hst.home_rank
+          ? '· Local: puesto <b>#'+(hst.home_rank)+'</b> · '+(hst.home_points)+' pts · forma: '+(hst.home_form_table||'—')+'<br>'
+            +'· Visita: puesto <b>#'+(hst.away_rank)+'</b> · '+(hst.away_points)+' pts · forma: '+(hst.away_form_table||'—')+'<br>'
+            +'· Diferencia de pts: '+(hst.points_diff||0)+' · Diferencia de posición: '+(hst.rank_diff||0)
+          : '⚠ '+(hst.note||'Tabla no disponible')
+        )+'<br><span style="color:var(--green)">Más pts = local está mejor ubicado en la tabla</span>',
+
       Goles: '<b>Potencial goleador</b> (max 20 pts)<br>'
-        +'· Local anota: '+(hf.home_avg_scored||'?')+'/p · Visita encaja: '+(hf.away_avg_conceded||'?')+'/p<br>'
-        +'· Over 2.5: '+(hh.over25_pct||0)+'% · BTTS: '+(hh.btts_pct||0)+'%<br>'
-        +'<span style="color:var(--dim)">Más pts = mayor probabilidad de goles</span>',
+        +'Combina ataque local vs defensa visitante y modela Poisson.<br>'
+        +'· Local anota: '+(hf.home_avg_scored||0)+'/p · Visita encaja: '+(hf.away_avg_conceded||0)+'/p<br>'
+        +'· Visita anota: '+(hf.away_avg_scored||0)+'/p · Local encaja: '+(hf.home_avg_conceded||0)+'/p<br>'
+        +'· H2H Over 2.5: '+(hh.over25_pct||0)+'% · BTTS: '+(hh.btts_pct||0)+'%<br>'
+        +'<span style="color:var(--green)">Más pts = mayor potencial goleador del local</span>',
+
       Local: '<b>Ventaja de local</b> (max 10 pts)<br>'
-        +'Historial del equipo local jugando en casa.<br>'
-        +'· Partidos en casa analizados: '+(hha.home_games||'?')+'<br>'
-        +'· Win rate en casa: '+(hha.home_win_rate||'?')+'%<br>'
-        +'<span style="color:var(--dim)">Más pts = el local es fuerte en casa</span>',
+        +'Win rate histórico del local en esta liga (dato por liga, no por equipo).<br>'
+        +'· Win rate de local en '+(d.league||'esta liga')+': <b>'+(hha.league_home_win_rate||'?')+'</b><br>'
+        +'· Referencia neutral: 50%<br>'
+        +'<span style="color:var(--green)">Más pts = liga donde el local tiene mayor ventaja estadística</span>',
+
       'Consist.': '<b>Consistencia</b> (max 5 pts)<br>'
-        +'Mide la estabilidad del rendimiento reciente del local.<br>'
-        +'· Desviación estándar de goles: '+(hco.home_std||'?')+'<br>'
-        +'· Racha sin perder: '+(hco.home_unbeaten||'?')+' partidos<br>'
-        +'<span style="color:var(--dim)">Más pts = rendimiento más estable y predecible</span>',
+        +'Mide cuánto varía el rendimiento (W/D/L) del equipo local — baja varianza = alta consistencia.<br>'
+        +'· Consistencia local: <b>'+(hco.home_consistency||0)+'%</b><br>'
+        +'· Consistencia visita: '+(hco.away_consistency||0)+'%<br>'
+        +'<span style="color:var(--green)">Más pts = rendimiento más estable y predecible</span>',
     };
     return m[key]||'';
   }
