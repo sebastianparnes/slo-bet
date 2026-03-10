@@ -378,3 +378,29 @@ async def debug_form_via_season(team_id: int, league: str = "PrvaLiga"):
             except Exception as e:
                 results[url.split("sofascore.com")[-1]] = {"error": str(e)}
         return results
+
+
+@router.get("/api/debug/h2h-test/{home_id}/{away_id}")
+async def debug_h2h_test(home_id: int, away_id: int):
+    """Probar distintos endpoints H2H de Sofascore"""
+    from app.football_api import SF_HEADERS
+    async with httpx.AsyncClient(timeout=12, headers=SF_HEADERS) as client:
+        urls = {
+            "head2head_direct": f"https://api.sofascore.com/api/v1/event/head2head/{home_id}/{away_id}",
+            "team_vs_team":     f"https://api.sofascore.com/api/v1/team/{home_id}/versus/{away_id}/matches",
+        }
+        results = {}
+        for k, url in urls.items():
+            try:
+                r = await client.get(url)
+                data = r.json()
+                events = data.get("events") or data.get("previousEvents") or data.get("matches") or []
+                results[k] = {
+                    "status": r.status_code,
+                    "events": len(events),
+                    "keys": list(data.keys()),
+                    "sample": events[0].get("homeTeam",{}).get("name") if events else None,
+                }
+            except Exception as e:
+                results[k] = {"error": str(e)}
+        return results
