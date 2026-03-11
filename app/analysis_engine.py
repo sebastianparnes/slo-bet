@@ -38,6 +38,11 @@ Tipos de apuesta analizados:
 import math
 from typing import Optional
 from dataclasses import dataclass, asdict
+try:
+    from app.cal_correction import get_correction
+    _HAS_CORRECTION = True
+except ImportError:
+    _HAS_CORRECTION = False
 
 
 @dataclass
@@ -788,7 +793,22 @@ def analyze_match(
     
     over25_p = goals_details["over25_prob"] / 100
     btts_p = goals_details["btts_prob"] / 100
-    
+
+    # --- Calibration correction ---
+    _correction_applied = {}
+    if _HAS_CORRECTION:
+        try:
+            cf = get_correction(league)
+            home_win_p, draw_p, away_win_p = cf.apply_1x2(home_win_p, draw_p, away_win_p)
+            home_xg, away_xg = cf.apply_xg(home_xg, away_xg)
+            # Recalculate over/under and btts with corrected xG
+            if cf.samples >= 30:
+                over25_p = _over_probability(home_xg, away_xg, 2.5)
+                btts_p   = _btts_probability(home_xg, away_xg)
+            _correction_applied = cf.correction_summary()
+        except Exception as _ce:
+            print(f"[analyze_match] correction error: {_ce}")
+
     # --- Recommendations ---
     recs = _build_recommendations(
         home_win_p, draw_p, away_win_p,
@@ -809,6 +829,7 @@ def analyze_match(
         warnings.append("Datos de forma incompletos - usando valores aproximados")
     
     data_quality = "full" if not warnings else ("partial" if len(warnings) <= 2 else "mock")
+    if '_correction_applied' not in dir(): _correction_applied = {}
     
     top_rec = recs[0] if recs else None
     summary = _generate_summary(
@@ -865,6 +886,7 @@ def analyze_match(
         "overall_confidence": round(overall_normalized, 1),
         "value_alert":        has_value,
         "has_value_bet":      has_value,
+        "calibration_correction": _correction_applied,
 
         "data_quality": data_quality,
         "warnings":     warnings,

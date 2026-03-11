@@ -79,6 +79,17 @@ async def get_metrics(league: str = Query(None, description="Filtrar por liga, o
     return metrics
 
 
+@router.post("/refresh-cache")
+async def refresh_correction_cache():
+    """Force the in-memory correction cache to refresh from DB on next request."""
+    try:
+        from app.cal_correction import force_refresh
+        force_refresh()
+        return {"status": "ok", "message": "Cache de corrección marcado para refresh"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.delete("/reset")
 async def reset_calibration():
     """Delete all calibration data (use with caution)."""

@@ -979,8 +979,16 @@ function renderModal(d) {
   const dqC={'full':'var(--green)','partial':'#b5860d','mock':'var(--red)'}[d.data_quality]||'var(--dim)';
   const dqL={'full':'✓ Datos reales (Sofascore)','partial':'⚠ Datos parciales','mock':'⚠ Datos simulados — no usar para apostar'}[d.data_quality]||'';
   const warns=(d.warnings||[]).filter(w=>!/h2h|historial/i.test(w));
+  const cal=d.calibration_correction||{};
+  const calHtml=cal.applied
+    ? '<div style="display:inline-flex;gap:6px;align-items:center;background:#e8f5e2;border:1px solid var(--green);border-radius:4px;padding:3px 10px;font-family:var(--mono);font-size:9px;margin-bottom:10px;flex-wrap:wrap">'
+      +'<b>⚙ Calibración activa</b> ('+(cal.source==='league'?'liga':'global')+' · '+cal.samples+' partidos)'
+      +(Math.abs(cal.home_win_bias||0)>1?' &nbsp;·&nbsp; local '+(cal.home_win_bias>0?'▼':'▲')+Math.abs(cal.home_win_bias).toFixed(1)+'%':'')
+      +(Math.abs(cal.over25_bias||0)>1?' &nbsp;·&nbsp; O/U '+(cal.over25_bias>0?'▼':'▲')+Math.abs(cal.over25_bias).toFixed(1)+'%':'')
+      +'</div>'
+    : '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:6px">⚙ Sin calibración aún</div>';
 
-  document.getElementById('modal-body').innerHTML=`
+  document.getElementById('modal-body').innerHTML=calHtml+`
     <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:2px">${flag} ${d.league} · ${dt}</div>
     ${dqL?`<div style="font-family:var(--mono);font-size:9px;color:${dqC};margin-bottom:10px;padding:3px 6px;background:${dqC}18;border-radius:3px;display:inline-block">${dqL}</div>`:''}
 

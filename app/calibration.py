@@ -353,6 +353,14 @@ async def run_calibration(leagues: list[str] = None, pages_per_league: int = 3) 
         await asyncio.sleep(1.0)  # be polite between leagues
 
     print(f"[cal] Done: {total_processed} new, {total_skipped} skipped, {errors} errors")
+    # Force correction cache refresh so new data is applied immediately
+    if total_processed > 0:
+        try:
+            from app.cal_correction import force_refresh
+            force_refresh()
+            print("[cal] correction cache refreshed")
+        except Exception as e:
+            print(f"[cal] cache refresh error: {e}")
     return {"processed": total_processed, "skipped": total_skipped, "errors": errors}
 
 
