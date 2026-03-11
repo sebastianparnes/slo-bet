@@ -402,10 +402,17 @@ def _goals_component(home_form: dict, away_form: dict, h2h: dict) -> tuple[float
     # Normalize defense: higher conceded = weaker defense = higher xg for opponent
     home_xg = home_attack * (away_defense / 1.2)
     away_xg = away_attack * (home_defense / 1.2)
-    
+
+    # Calibration scale factor: model historically overestimates xG by ~27%
+    # Derived from 948 real matches: avg model xG=3.52 vs avg real goals=2.77
+    # Scale = 2.77 / 3.52 = 0.787
+    _XG_SCALE = 0.787
+    home_xg = home_xg * _XG_SCALE
+    away_xg = away_xg * _XG_SCALE
+
     # Clamp
-    home_xg = min(max(home_xg, 0.4), 3.5)
-    away_xg = min(max(away_xg, 0.3), 3.0)
+    home_xg = min(max(home_xg, 0.35), 3.0)
+    away_xg = min(max(away_xg, 0.25), 2.8)
     
     over25_prob = _over_probability(home_xg, away_xg, 2.5)
     btts_prob = _btts_probability(home_xg, away_xg)
@@ -414,9 +421,19 @@ def _goals_component(home_form: dict, away_form: dict, h2h: dict) -> tuple[float
     h2h_over = h2h.get("over25_pct", 50) / 100
     h2h_btts = h2h.get("btts_pct", 50) / 100
     
-    # Blend: 70% model, 30% H2H history
-    over25_final = over25_prob * 0.7 + h2h_over * 0.3
-    btts_final = btts_prob * 0.7 + h2h_btts * 0.3
+    # Blend: 70% model, 30% H2H — only if H2H has real data
+    h2h_matches = h2h.get("total_matches", 0)
+    if h2h_matches >= 3 and h2h.get("over25_pct", 0) > 0:
+        over25_final = over25_prob * 0.70 + h2h_over * 0.30
+        btts_final   = btts_prob   * 0.70 + h2h_btts * 0.30
+    elif h2h_matches >= 3:
+        # H2H exists but 0% over25 — weight it less (likely low-scoring rivalry)
+        over25_final = over25_prob * 0.85 + h2h_over * 0.15
+        btts_final   = btts_prob   * 0.85 + h2h_btts * 0.15
+    else:
+        # No H2H data — use model only
+        over25_final = over25_prob
+        btts_final   = btts_prob
     
     over25_score = over25_final * 20
     
