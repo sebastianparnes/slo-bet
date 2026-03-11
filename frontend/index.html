@@ -1713,7 +1713,7 @@ function rebuildBriefing() {
     const dateStr = p.date ? p.date.split('T')[0] : '';
     const riskColor = p.risk === 'low' ? 'var(--green)' : p.risk === 'high' ? '#c0392b' : '#b5860d';
 
-    html += '<div class="briefing-row ev" onclick="openMatchModal('' + p.match_id + '')">'
+    html += '<div class="briefing-row ev" onclick="openMatchModal(' + JSON.stringify(p.match_id) + ')">'
       + '<div>'
       + '<div class="briefing-meta">' + p.league + ' · ' + dateStr + ' · <span style="color:' + riskColor + '">' + p.risk + '</span></div>'
       + '<div class="briefing-title">' + p.home + ' <span style="color:var(--dim);font-weight:400">vs</span> ' + p.away + '</div>'
