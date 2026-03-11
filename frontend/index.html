@@ -1619,14 +1619,27 @@ function buildBriefing(matches) {
   // Extract all EV+ recommendations from all matches
   const picks = [];
 
+  // Only today and tomorrow
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr = tomorrow.toISOString().slice(0,10);
+
   for (const m of matches) {
     if (m.error) continue;
+    // Date filter: today or tomorrow only
+    const mDate = (m.match_date||'').slice(0,10);
+    if (mDate !== todayStr && mDate !== tomorrowStr) continue;
     const recs = m.recommendations || [];
     for (const r of recs) {
       if (!r.is_value || !r.ev || r.ev <= 0.04) continue;
+      // Skip if EV suspiciously high (odds probably not loaded)
+      if (r.ev > 0.80) continue;
       // Skip low confidence or very low odds
       if (r.confidence < 70) continue;
       if (r.xbet_odd && r.xbet_odd < 1.20) continue;
+      // Skip if no real xbet odd (only min_odds fallback)
+      if (!r.xbet_odd) continue;
 
       picks.push({
         match_id:   m.match_id,
