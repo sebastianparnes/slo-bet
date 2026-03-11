@@ -272,6 +272,19 @@ body{
 .btn-run{background:var(--green)!important;color:#fff!important}
 .btn-sm{font-family:var(--mono);font-size:10px;padding:5px 10px;border:1px solid var(--rule);background:var(--card);border-radius:4px;cursor:pointer;letter-spacing:.04em}
 .btn-sm:hover{background:var(--surf)}
+.briefing-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--rule);border-radius:8px;padding:12px 16px;cursor:pointer;transition:border-color .15s}
+.briefing-row:hover{border-color:var(--green)}
+.briefing-row.ev{border-color:var(--lime);background:#f8ffe8}
+.briefing-meta{font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em}
+.briefing-title{font-size:13px;font-weight:700;margin-bottom:2px}
+.briefing-sub{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.briefing-right{text-align:right;min-width:110px}
+.briefing-amount{font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green)}
+.briefing-odds{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px}
+.briefing-win{font-family:var(--mono);font-size:10px;color:var(--green)}
+.briefing-summary{display:flex;gap:16px;padding:10px 16px;background:var(--surf);border-radius:8px;margin-bottom:8px;flex-wrap:wrap}
+.bs-item{font-family:var(--mono);font-size:11px}
+.bs-label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
 .reg-btn{background:#1a1a1a;color:#e8f5e2;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-family:var(--mono);cursor:pointer;letter-spacing:.05em;transition:background .15s;font-weight:600}.reg-btn:hover{background:#333}
 .rreason::before{content:'›';position:absolute;left:4px;color:var(--green)}
 .btn-log{width:100%;margin-top:10px;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--lime);border:1.5px solid var(--ink);padding:10px;cursor:pointer;transition:all .15s}
@@ -475,6 +488,22 @@ select option{background:var(--card)}
         Actualizar
       </button>
     </div>
+    <!-- ── DAILY BRIEFING ── -->
+    <div id="daily-briefing" style="margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim)">
+          ⚡ Mejores apuestas del día
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Bankroll diario $</span>
+          <input id="bankroll-input" type="number" value="20000" min="1000" step="1000"
+            style="width:90px;font-family:var(--mono);font-size:11px;padding:4px 8px;border:1px solid var(--rule);background:var(--card);border-radius:4px;text-align:right"
+            oninput="rebuildBriefing()">
+        </div>
+      </div>
+      <div id="briefing-cards" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
     <div id="cards" class="cards">
       <div class="loading" style="columns:auto">
         <div class="spinner"></div>
@@ -749,6 +778,7 @@ function applyF() {
 
 function renderCards(list) {
   _curList = list;
+  buildBriefing(list);
   const el = document.getElementById('cards');
   const FL = {'PrvaLiga':'🇸🇮','2SNL':'🇸🇮','PrimeraDivision':'🇦🇷','PrimeraNacional':'🇦🇷',
     'ChampionsLeague':'🏆','PremierLeague':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','LaLiga':'🇪🇸','SerieA':'🇮🇹',
@@ -1578,6 +1608,127 @@ function renderCalibration(d) {
 }
 
 function round1(v) { return Math.round((v||0)*10)/10; }
+
+
+/* ════════════════════════════════════════════════════
+   DAILY BRIEFING
+   ════════════════════════════════════════════════════ */
+let _briefingData = [];  // filled when matches load
+
+function buildBriefing(matches) {
+  // Extract all EV+ recommendations from all matches
+  const picks = [];
+
+  for (const m of matches) {
+    if (m.error) continue;
+    const recs = m.recommendations || [];
+    for (const r of recs) {
+      if (!r.is_value || !r.ev || r.ev <= 0.04) continue;
+      // Skip low confidence or very low odds
+      if (r.confidence < 70) continue;
+      if (r.xbet_odd && r.xbet_odd < 1.20) continue;
+
+      picks.push({
+        match_id:   m.match_id,
+        home:       m.home_team,
+        away:       m.away_team,
+        league:     m.league,
+        date:       m.match_date,
+        bet_type:   r.bet_type,
+        selection:  r.selection,
+        label:      r.label,
+        confidence: r.confidence,
+        ev:         r.ev,
+        odd:        r.xbet_odd || r.min_odds,
+        min_odds:   r.min_odds,
+        risk:       r.risk_level,
+      });
+    }
+  }
+
+  // Sort by EV descending, break ties by confidence
+  picks.sort((a,b) => (b.ev - a.ev) || (b.confidence - a.confidence));
+
+  // Deduplicate: max 1 pick per match (highest EV)
+  const seen = new Set();
+  const top = [];
+  for (const p of picks) {
+    if (!seen.has(p.match_id)) {
+      seen.add(p.match_id);
+      top.push(p);
+    }
+    if (top.length >= 6) break;
+  }
+
+  _briefingData = top;
+  rebuildBriefing();
+}
+
+function rebuildBriefing() {
+  const bankroll = parseFloat(document.getElementById('bankroll-input').value) || 20000;
+  const panel = document.getElementById('daily-briefing');
+  const container = document.getElementById('briefing-cards');
+
+  if (!_briefingData.length) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  // Kelly-inspired stake sizing: f = (p*b - (1-p)) / b
+  // where p = confidence/100, b = odd - 1
+  // Cap at 30% of bankroll per bet, min 5%
+  function kellyStake(conf, odd, bankroll) {
+    const p = conf / 100;
+    const b = (odd || 1.5) - 1;
+    const f = Math.max(0, (p * b - (1 - p)) / b);
+    const frac = Math.min(f * 0.5, 0.30);  // half-Kelly, max 30%
+    const min_pct = 0.05;
+    return Math.round(Math.max(frac, min_pct) * bankroll / 500) * 500;
+  }
+
+  // Summary row
+  const total_stake = _briefingData.reduce((s,p) => s + kellyStake(p.confidence, p.odd, bankroll), 0);
+  const exp_profit = _briefingData.reduce((s,p) => {
+    const stake = kellyStake(p.confidence, p.odd, bankroll);
+    return s + stake * p.ev;
+  }, 0);
+
+  const btIcons = {'1X2':'⚽','double_chance':'🔄','over_under':'📊','btts':'🥅',
+    'btts_ht':'⏱','halftime':'1T','asian_handicap':'🏹','corners':'📐',
+    'cards':'🟨','exact_score':'🎯'};
+
+  let html = '<div class="briefing-summary">'
+    + '<div class="bs-item"><div class="bs-label">Apuestas</div><b>' + _briefingData.length + '</b></div>'
+    + '<div class="bs-item"><div class="bs-label">Total a arriesgar</div><b>$' + total_stake.toLocaleString() + '</b></div>'
+    + '<div class="bs-item"><div class="bs-label">Ganancia esperada</div><b style="color:var(--green)">+$' + Math.round(exp_profit).toLocaleString() + '</b></div>'
+    + '<div class="bs-item"><div class="bs-label">ROI esperado</div><b style="color:var(--green)">+' + (total_stake > 0 ? (exp_profit/total_stake*100).toFixed(1) : 0) + '%</b></div>'
+    + '</div>';
+
+  for (const p of _briefingData) {
+    const stake   = kellyStake(p.confidence, p.odd, bankroll);
+    const win_net = Math.round(stake * (p.odd - 1));
+    const evPct   = (p.ev * 100).toFixed(1);
+    const icon    = btIcons[p.bet_type] || '📋';
+    const dateStr = p.date ? p.date.split('T')[0] : '';
+    const riskColor = p.risk === 'low' ? 'var(--green)' : p.risk === 'high' ? '#c0392b' : '#b5860d';
+
+    html += '<div class="briefing-row ev" onclick="openMatchModal('' + p.match_id + '')">'
+      + '<div>'
+      + '<div class="briefing-meta">' + p.league + ' · ' + dateStr + ' · <span style="color:' + riskColor + '">' + p.risk + '</span></div>'
+      + '<div class="briefing-title">' + p.home + ' <span style="color:var(--dim);font-weight:400">vs</span> ' + p.away + '</div>'
+      + '<div class="briefing-sub">' + icon + ' ' + p.label + ' &nbsp;·&nbsp; conf ' + Math.round(p.confidence) + '% &nbsp;·&nbsp; EV+' + evPct + '%</div>'
+      + '</div>'
+      + '<div class="briefing-right">'
+      + '<div class="briefing-amount">$' + stake.toLocaleString() + '</div>'
+      + '<div class="briefing-odds">@' + p.odd + '</div>'
+      + '<div class="briefing-win">+$' + win_net.toLocaleString() + ' si gana</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  container.innerHTML = html;
+}
 </script>
 </body>
 </html>
