@@ -799,7 +799,8 @@ function renderCards(list) {
     const dq=m.data_quality;
     const dqB=dq==='full'?'<span style="font-family:var(--mono);font-size:8px;color:var(--green);padding:1px 4px;background:rgba(0,160,70,.12);border-radius:2px;margin-left:4px">REAL</span>'
              :dq==='mock'?'<span style="font-family:var(--mono);font-size:8px;color:var(--red);padding:1px 4px;background:rgba(200,0,0,.1);border-radius:2px;margin-left:4px">DEMO</span>':'';
-    return `<div class="mc ${m.has_value_bet?'val':''}" onclick="openMatchModal(${idx})" style="cursor:pointer">
+    const _topConf = m.recommendations && m.recommendations[0] ? m.recommendations[0].confidence : 0;
+    return `<div class="mc ${(m.has_value_bet && _topConf>=85)?'val':''}" onclick="openMatchModal(${idx})" style="cursor:pointer">
       <div class="cband"><span class="cleague">${flag} ${m.league}</span><span class="cdate">${dt}</span>${dqB}</div>
       <div class="cmatch"><span class="team h">${m.home_team}</span><span class="vs">×</span><span class="team a">${m.away_team}</span></div>
       <div class="cprobs">
