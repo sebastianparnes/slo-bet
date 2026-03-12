@@ -1622,15 +1622,20 @@ function buildBriefing(matches) {
 
   // Only today and tomorrow
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
-  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate()+1);
-  const tomorrowStr = tomorrow.toISOString().slice(0,10);
+  // Use LOCAL date to avoid UTC offset issues (Argentina = UTC-3)
+  const todayStr = now.getFullYear() + '-'
+    + String(now.getMonth()+1).padStart(2,'0') + '-'
+    + String(now.getDate()).padStart(2,'0');
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
+  const yesterdayStr = yesterday.getFullYear() + '-'
+    + String(yesterday.getMonth()+1).padStart(2,'0') + '-'
+    + String(yesterday.getDate()).padStart(2,'0');
 
   for (const m of matches) {
     if (m.error) continue;
-    // Date filter: today or tomorrow only
+    // Date filter: today only (local), plus yesterday for late-night timezone drift
     const mDate = (m.match_date||'').slice(0,10);
-    if (mDate !== todayStr && mDate !== tomorrowStr) continue;
+    if (mDate !== todayStr && mDate !== yesterdayStr) continue;
     const recs = m.recommendations || [];
     for (const r of recs) {
       if (!r.is_value || !r.ev || r.ev <= 0.04) continue;
