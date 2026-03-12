@@ -1636,7 +1636,7 @@ function buildBriefing(matches) {
       // Skip if EV suspiciously high (odds probably not loaded)
       if (r.ev > 0.80) continue;
       // Skip low confidence or very low odds
-      if (r.confidence < 70) continue;
+      if (r.confidence < 85) continue;
       if (r.xbet_odd && r.xbet_odd < 1.20) continue;
       // Skip if no real xbet odd (only min_odds fallback)
       if (!r.xbet_odd) continue;
